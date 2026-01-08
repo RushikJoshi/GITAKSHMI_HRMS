@@ -38,6 +38,8 @@ import RequirementPage from '../pages/HR/RequirementPage';
 import Applicants from '../pages/HR/Applicants';
 import AttendanceAdmin from '../pages/HR/AttendanceAdmin';
 import CalendarManagement from '../pages/HR/CalendarManagement';
+import CandidateStatusTracker from '../pages/HR/CandidateStatusTracker';
+import CandidateTimeline from '../pages/HR/CandidateStatusTracker/CandidateTimeline';
 
 // 🆕 Letter modules (from RIGHT)
 import LetterTemplates from '../pages/HR/LetterTemplates';
@@ -123,6 +125,8 @@ export default function AppRoutes() {
         <Route path="leave-policies" element={<LeavePolicies />} />
         <Route path="requirements" element={<RequirementPage />} />
         <Route path="applicants" element={<Applicants />} />
+        <Route path="candidate-status" element={<CandidateStatusTracker />} />
+        <Route path="candidate-status/:id" element={<CandidateTimeline />} />
         <Route path="org" element={<OrgStructure />} />
         <Route path="org-tree" element={<CeoOrg />} />
         <Route path="access" element={<AccessControl />} />
