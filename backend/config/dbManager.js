@@ -60,6 +60,8 @@ function registerModels(db, tenantId) {
     const CompanyPayrollRuleSchema = require("../models/CompanyPayrollRule");
     const SalaryStructureSchema = require("../models/SalaryStructure");
     const CandidateSchema = require("../models/Candidate");
+    const TrackerCandidateSchema = require("../models/TrackerCandidate");
+    const CandidateStatusLogSchema = require("../models/CandidateStatusLog");
 
 
     // Register models using connection.model() - only register if not already registered
@@ -96,6 +98,8 @@ function registerModels(db, tenantId) {
     if (!db.models.CompanyPayrollRule) db.model("CompanyPayrollRule", CompanyPayrollRuleSchema);
     if (!db.models.SalaryStructure) db.model("SalaryStructure", SalaryStructureSchema);
     if (!db.models.Candidate) db.model("Candidate", CandidateSchema);
+    if (!db.models.TrackerCandidate) db.model("TrackerCandidate", TrackerCandidateSchema);
+    if (!db.models.CandidateStatusLog) db.model("CandidateStatusLog", CandidateStatusLogSchema);
 
 
     registeredModels.add(tenantId);

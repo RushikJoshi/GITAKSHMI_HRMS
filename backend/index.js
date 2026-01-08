@@ -109,6 +109,8 @@ app.use('/api/activities', activityRoutes); // Moved here
 // Moved from above to ensure tenantDB is available
 app.use('/api/payroll', payrollRoutes);
 app.use('/api/payroll-rules', payrollRuleRoutes);
+app.use('/api/tracker', require('./routes/tracker.routes'));
+app.use('/api/hr/candidate-status', require('./routes/tracker.routes'));
 app.use('/api', deductionRoutes);
 
 /* ===============================
@@ -177,6 +179,8 @@ mongoose
     mongoose.model('Requirement', require('./models/Requirement'));
     mongoose.model('Candidate', require('./models/Candidate'));
     mongoose.model('Interview', require('./models/Interview'));
+    mongoose.model('TrackerCandidate', require('./models/TrackerCandidate'));
+    mongoose.model('CandidateStatusLog', require('./models/CandidateStatusLog'));
 
     app.listen(PORT, async () => {
       console.log(`✅ Server running on port ${PORT}`);
