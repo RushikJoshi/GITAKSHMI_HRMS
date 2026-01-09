@@ -6,7 +6,9 @@ const RequirementSchema = new mongoose.Schema({
   department: { type: String, trim: true, required: true },
   vacancy: { type: Number, required: true, min: 1 },
   status: { type: String, enum: ['Open', 'Closed'], default: 'Open' },
-  createdAt: { type: Date, default: Date.now }
-});
+  updatedAt: { type: Date, default: Date.now },
+  publicFields: { type: [String], default: [] },
+  workflow: { type: [String], default: ['Applied', 'Shortlisted', 'Interview', 'Finalized'] }
+}, { strict: false });
 
 module.exports = RequirementSchema;

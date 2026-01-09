@@ -138,7 +138,7 @@ exports.getPublicJobById = async (req, res) => {
     const Requirement = tenantDB.model("Requirement");
 
     const job = await Requirement.findOne({ _id: id, tenant: tenantId })
-      .select('jobTitle department vacancy status description jobVisibility experience');
+      .select('jobTitle department vacancy status description jobVisibility minExperienceMonths maxExperienceMonths salaryMin salaryMax jobType workMode publicFields customFields');
 
     if (!job) {
       return res.status(404).json({ error: "Job not found" });

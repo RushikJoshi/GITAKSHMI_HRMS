@@ -52,8 +52,8 @@ exports.scheduleInterview = async (req, res) => {
         if (!applicant) return res.status(404).json({ message: "Applicant not found" });
 
         // Update Interview Details
-        applicant.interview = { date, time, mode, location, interviewerName, notes };
-        applicant.status = 'Interview Scheduled';
+        applicant.interview = { date, time, mode, location, interviewerName, notes, completed: false };
+        // applicant.status = 'Interview Scheduled'; // STAIR CASE: Keep in current stage
 
         await applicant.save();
 
@@ -92,9 +92,8 @@ exports.rescheduleInterview = async (req, res) => {
         if (!applicant) return res.status(404).json({ message: "Applicant not found" });
 
         // Update
-        applicant.interview = { date, time, mode, location, interviewerName, notes };
-        applicant.status = 'Interview Rescheduled'; // Or keep 'Interview Scheduled' but typically Rescheduled is a status for tracking history? 
-        // User requested 'Interview Rescheduled' status
+        applicant.interview = { date, time, mode, location, interviewerName, notes, completed: false };
+        // applicant.status = 'Interview Rescheduled'; // STAIR CASE: Keep in current stage
 
         await applicant.save();
 
@@ -130,7 +129,12 @@ exports.markInterviewCompleted = async (req, res) => {
         const applicant = await Applicant.findById(id);
         if (!applicant) return res.status(404).json({ message: "Applicant not found" });
 
-        applicant.status = 'Interview Completed';
+        if (applicant.interview) {
+            applicant.interview.completed = true;
+            // Mark the model as modified for the nested object
+            applicant.markModified('interview');
+        }
+        // applicant.status = 'Interview Completed'; // STAIR CASE: Keep in current stage
         await applicant.save();
 
         // NO EMAIL required
@@ -308,7 +312,7 @@ exports.assignSalary = async (req, res) => {
                 // If it's not a standard statutory contribution, it's likely a custom benefit
                 benefitType = 'CUSTOM';
             }
-            
+
             return {
                 name: contrib.name,
                 monthly: contrib.monthlyAmount || contrib.monthly || 0,
@@ -632,7 +636,7 @@ exports.uploadSalaryExcel = async (req, res) => {
 exports.updateApplicantStatus = async (req, res) => {
     try {
         const { id } = req.params;
-        const { status } = req.body;
+        const { status, rating, feedback, stageName } = req.body;
 
         logToDebug(`🔥 [STATUS UPDATE REQUEST] ID: ${id}, Status: ${status}`);
 
@@ -654,6 +658,18 @@ exports.updateApplicantStatus = async (req, res) => {
 
         // Update Status
         applicant.status = status;
+
+        // --- SAVE REVIEW / FEEDBACK ---
+        if (rating || feedback) {
+            applicant.reviews.push({
+                stage: stageName || status,
+                rating: rating,
+                feedback: feedback,
+                interviewerName: req.user?.name || 'HR Team',
+                createdAt: new Date()
+            });
+        }
+
         await applicant.save();
 
         logToDebug(`✅ DB Updated. Checking email trigger...`);
@@ -668,7 +684,9 @@ exports.updateApplicantStatus = async (req, res) => {
                     applicant.name,
                     applicant.requirementId?.jobTitle || 'Job Application',
                     applicant._id,
-                    status
+                    status,
+                    feedback,
+                    rating
                 );
 
                 logToDebug("✅ Email Sent Successfully (Service returned)");

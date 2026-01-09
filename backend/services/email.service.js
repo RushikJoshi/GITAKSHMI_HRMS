@@ -60,7 +60,7 @@ class EmailService {
      * Send Status Update Email (Standardized Template)
      * ALIAS: sendStatusEmail (for backward compatibility)
      */
-    async sendApplicationStatusEmail(to, candidateName, jobTitle, applicationId, status) {
+    async sendApplicationStatusEmail(to, candidateName, jobTitle, applicationId, status, feedback = null, rating = null) {
         const subject = `Application Status Update - ${jobTitle}`;
 
         // Color coding for status
@@ -88,10 +88,20 @@ class EmailService {
                         <p style="margin: 0; font-weight: bold; color: #333;">${applicationId}</p>
                         
                         <p style="margin: 15px 0 5px; font-size: 14px; color: #777;">Current Status:</p>
-                        <span style="display: inline-block; background-color: ${statusColor}; color: white; padding: 5px 12px; border-radius: 15px; font-weight: bold; font-size: 14px;">
-                            ${status}
                         </span>
                     </div>
+
+                    ${feedback ? `
+                        <div style="margin: 20px 0; padding: 15px; background-color: #fcfcfc; border: 1px dashed #e0e0e0; border-radius: 8px;">
+                            <p style="margin: 0 0 10px 0; font-size: 13px; font-weight: bold; color: #7f8c8d; text-transform: uppercase;">Feedback / Assessment</p>
+                            <p style="margin: 0; color: #34495e; font-style: italic; line-height: 1.6;">"${feedback}"</p>
+                            ${rating ? `
+                                <div style="margin-top: 10px; color: #f1c40f; font-size: 18px;">
+                                    ${'★'.repeat(rating)}${'☆'.repeat(5 - rating)}
+                                </div>
+                            ` : ''}
+                        </div>
+                    ` : ''}
 
                     <p style="color: #555; font-size: 14px; margin-top: 20px;">
                         ${status === 'Selected'
