@@ -66,11 +66,11 @@ router.post('/runs/:id/cancel', payrollRunController.cancelPayrollRun);
 
 // Payslip Routes - Employee self-service (no HR requirement)
 router.get('/payslips/my', payslipController.getMyPayslips);
-router.get('/payslips/my/:id', payslipController.getPayslipById);
-router.get('/payslips/my/:id/download', payslipController.downloadPayslipPDF);
+// router.get('/payslips/my/:id', payslipController.getPayslipById); // Deprecated: Use /api/payroll-engine/payslip/:employeeId/:period
+// router.get('/payslips/my/:id/download', payslipController.downloadPayslipPDF); // Deprecated
 
 // Payslip Routes - HR routes (full access)
-router.get('/payslips', auth.requireHr, payslipController.getPayslips);
+// router.get('/payslips', auth.requireHr, payslipController.getPayslips); // Deprecated: Use /api/payroll-engine/payroll/:period
 // Note: /payslips/:id and /payslips/:id/download are handled by employee routes above
 // HR can access using same endpoints
 

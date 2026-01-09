@@ -5,7 +5,7 @@ import {
     Search, Filter, Download,
     Settings, ShieldAlert,
     User, Clock, MapPin,
-    MoreVertical, Edit2, Lock, X, Eye, ChevronLeft, ChevronRight
+    MoreVertical, Edit2, Lock, X, Eye, ChevronLeft, ChevronRight, Upload
 } from 'lucide-react';
 import { formatDateDDMMYYYY } from '../../utils/dateUtils';
 import AttendanceSettings from './AttendanceSettings';
@@ -38,6 +38,8 @@ export default function AttendanceAdmin() {
         reason: ''
     });
     const [saving, setSaving] = useState(false);
+    const [uploading, setUploading] = useState(false);
+    const fileInputRef = React.useRef(null);
 
     useEffect(() => {
         if (view === 'dashboard') {
@@ -110,6 +112,29 @@ export default function AttendanceAdmin() {
         }
     };
 
+    const handleFileUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            setUploading(true);
+            const res = await api.post('/attendance/upload-excel', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            alert(res.data.message);
+            fetchStats();
+        } catch (err) {
+            console.error('Upload failed:', err);
+            alert(err.response?.data?.error || 'Failed to upload attendance');
+        } finally {
+            setUploading(false);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+    };
+
     return (
         <div className="space-y-8 p-6 md:p-8 animate-in fade-in duration-500">
             {/* Header / Tabs */}
@@ -145,6 +170,22 @@ export default function AttendanceAdmin() {
                             ) : (
                                 'Sync Logs'
                             )}
+                        </button>
+
+                        <input
+                            type="file"
+                            ref={fileInputRef}
+                            style={{ display: 'none' }}
+                            accept=".xlsx, .xls"
+                            onChange={handleFileUpload}
+                        />
+                        <button
+                            onClick={() => fileInputRef.current?.click()}
+                            disabled={uploading}
+                            className="bg-emerald-600 text-white px-6 py-3 rounded-2xl font-black uppercase text-xs tracking-widest shadow-xl shadow-emerald-500/20 hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        >
+                            <Upload size={16} />
+                            {uploading ? 'Uploading...' : 'Upload Excel'}
                         </button>
                     </div>
                 )}

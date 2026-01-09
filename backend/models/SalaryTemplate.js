@@ -17,9 +17,10 @@ const SalaryTemplateSchema = new mongoose.Schema({
         componentCode: { type: String }, // Link to SalaryComponent if available
         calculationType: {
             type: String,
-            enum: ['PERCENT_CTC', 'PERCENT_BASIC', 'FIXED', 'FLAT_AMOUNT'],
-            required: true
+            enum: ['PERCENT_CTC', 'PERCENT_BASIC', 'FIXED', 'FLAT_AMOUNT', 'FORMULA'],
+            default: 'FIXED'
         },
+        formula: { type: String }, // e.g. "CTC * 0.4"
         percentage: { type: Number, default: 0 }, // percentage value
         monthlyAmount: { type: Number, required: true },
         annualAmount: { type: Number, required: true },
@@ -31,6 +32,7 @@ const SalaryTemplateSchema = new mongoose.Schema({
         name: { type: String, required: true },
         componentCode: { type: String },
         calculationType: { type: String, default: 'PERCENT_PF_WAGE' },
+        formula: { type: String },
         percentage: { type: Number, default: 0 },
         monthlyAmount: { type: Number, required: true },
         annualAmount: { type: Number, required: true },
@@ -41,7 +43,8 @@ const SalaryTemplateSchema = new mongoose.Schema({
         name: { type: String, required: true },
         componentCode: { type: String }, // Link to DeductionMaster
         category: { type: String, enum: ['PRE_TAX', 'POST_TAX'] },
-        amountType: { type: String, enum: ['FIXED', 'PERCENTAGE'] },
+        amountType: { type: String, enum: ['FIXED', 'PERCENTAGE', 'FORMULA'] },
+        formula: { type: String },
         calculationBase: { type: String, enum: ['BASIC', 'GROSS'] },
         amountValue: { type: Number },
         monthlyAmount: { type: Number, default: 0 },

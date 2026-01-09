@@ -100,6 +100,9 @@ const EmployeeSchema = new mongoose.Schema({
     panCard: { type: String, trim: true }
   },
 
+  // New Snapshot-based Payroll Reference
+  salarySnapshotId: { type: mongoose.Schema.Types.ObjectId, ref: 'EmployeeSalarySnapshot', default: null },
+
   meta: { type: Object, default: {} },
 }, { timestamps: true });
 

@@ -57,95 +57,15 @@ const ApplicantSchema = new mongoose.Schema({
     completed: { type: Boolean, default: false }
   },
 
-  // Salary Assignment (before joining letter)
-  salaryTemplateId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'SalaryTemplate',
-    default: null
-  },
-  salaryStructureId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'SalaryStructure',
-    default: null
-  },
-  salarySnapshot: {
-    // Complete immutable salary breakdown (calculated once, never recalculated)
-    salaryTemplateId: mongoose.Schema.Types.ObjectId,
-    earnings: [{
-      name: { type: String },
-      monthlyAmount: { type: Number },
-      annualAmount: { type: Number },
-      enabled: { type: Boolean, default: true }
-    }],
-    employerContributions: [{
-      name: { type: String },
-      monthlyAmount: { type: Number },
-      annualAmount: { type: Number },
-      enabled: { type: Boolean, default: true }
-    }],
-    employeeDeductions: [{
-      name: { type: String },
-      monthlyAmount: { type: Number },
-      annualAmount: { type: Number },
-      category: { type: String, enum: ['PRE_TAX', 'POST_TAX'] },
-      enabled: { type: Boolean, default: true }
-    }],
-    grossA: {
-      monthly: { type: Number },
-      yearly: { type: Number }
-    },
-    grossB: {
-      monthly: { type: Number },
-      yearly: { type: Number }
-    },
-    grossC: {
-      monthly: { type: Number }, // Same as monthlyCTC
-      yearly: { type: Number }   // Same as annualCTC
-    },
-    takeHome: {
-      monthly: { type: Number },
-      yearly: { type: Number }
-    },
-    gratuity: {
-      monthly: { type: Number }, // 4.8% of Basic
-      yearly: { type: Number }
-    },
-    ctc: {
-      monthly: { type: Number },
-      yearly: { type: Number }
-    },
-    calculatedAt: { type: Date }
-  },
+  // New Snapshot-based Payroll Reference
+  salarySnapshotId: { type: mongoose.Schema.Types.ObjectId, ref: 'EmployeeSalarySnapshot', default: null },
 
-  // Full Salary Structure Configuration (Embedded to save collection space)
-  salaryStructureConfig: {
-    earnings: {
-      basic: { monthly: Number, yearly: Number, enabled: { type: Boolean, default: true } },
-      hra: { monthly: Number, yearly: Number, enabled: { type: Boolean, default: true } },
-      conveyance: { monthly: Number, yearly: Number, enabled: { type: Boolean, default: true } },
-      specialAllowance: { monthly: Number, yearly: Number, enabled: { type: Boolean, default: true } },
-      other: [{ name: String, monthly: Number, yearly: Number, enabled: { type: Boolean, default: true } }]
-    },
-    deductions: {
-      pfEmployee: { monthly: Number, yearly: Number, enabled: { type: Boolean, default: true } },
-      pfEmployer: { monthly: Number, yearly: Number, enabled: { type: Boolean, default: true } },
-      professionalTax: { monthly: Number, yearly: Number, enabled: { type: Boolean, default: true } },
-      esic: { monthly: Number, yearly: Number, enabled: { type: Boolean, default: true } },
-      esicEmployer: { monthly: Number, yearly: Number, enabled: { type: Boolean, default: true } },
-      other: [{ name: String, monthly: Number, yearly: Number, enabled: { type: Boolean, default: true } }]
-    },
-    employerContributions: [{
-      name: String,
-      monthly: Number,
-      yearly: Number,
-      enabled: { type: Boolean, default: true }
-    }],
-    grossSalary: { monthly: Number, yearly: Number },
-    totalDeductions: { monthly: Number, yearly: Number },
-    netSalary: { monthly: Number, yearly: Number },
-    ctc: { monthly: Number, yearly: Number },
-    updatedAt: { type: Date, default: Date.now }
-  },
+  // LEGACY: Embedded Salary Assignment (to be removed once fully migrated)
+  salaryTemplateId_legacy: { type: mongoose.Schema.Types.ObjectId, ref: 'SalaryTemplate', default: null },
+  salarySnapshot_legacy: { type: mongoose.Schema.Types.Mixed },
+  salaryStructureConfig_legacy: { type: mongoose.Schema.Types.Mixed },
+
+  // --- End Legacy ---
 
   // Custom Documents (ID proof, certificates, etc.)
   customDocuments: [{

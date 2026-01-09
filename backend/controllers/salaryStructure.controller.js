@@ -1,10 +1,9 @@
-const { calculateSalaryBreakup, suggestSalaryBreakup } = require('../services/salaryBreakupCalculator');
+const { calculateSalaryBreakup } = require('../services/salaryBreakupCalculator');
 
-// Import GLOBAL SalaryStructure model (NOT tenant-specific)
+// ✅ GLOBAL SalaryStructure model (single collection)
 const SalaryStructure = require('../models/SalaryStructure');
 
-// Helper to get models from tenant database
-// SalaryStructure is EXCLUDED - it's global
+// Helper to get tenant models (SalaryStructure excluded)
 function getModels(req) {
     if (!req.tenantDB) {
         throw new Error("Tenant database connection not available");
@@ -18,69 +17,37 @@ function getModels(req) {
     };
 }
 
-exports.suggestSalaryStructure = async (req, res) => {
-    try {
-        const { enteredCTC } = req.body;
-
-        if (!enteredCTC) {
-            return res.status(400).json({ message: "Annual CTC is required for suggestion." });
-        }
-
-        const models = getModels(req);
-
-        // Fetch ALL available components in parallel
-        const [earnings, deductions, benefits] = await Promise.all([
-            models.SalaryComponent.find({ isActive: true }).lean(),
-            models.DeductionMaster.find({ isActive: true }).lean(),
-            models.BenefitComponent.find({ isActive: true }).lean()
-        ]);
-
-        console.log(`[SUGGEST_CONTROLLER] DB Fetch Results:`, {
-            earningsNames: earnings.map(e => e.name),
-            deductionsNames: deductions.map(d => d.name),
-            benefitsNames: benefits.map(b => b.name)
-        });
-
-        const suggestion = suggestSalaryBreakup({
-            enteredCTC: Number(enteredCTC),
-            availableEarnings: earnings,
-            availableDeductions: deductions,
-            availableEmployerContributions: benefits
-        });
-
-        console.log(`[SUGGEST_CONTROLLER] Suggestion generated for CTC ${enteredCTC}:`, {
-            eCount: suggestion.earnings.length,
-            dCount: suggestion.deductions.length,
-            bCount: suggestion.employerContributions.length
-        });
-
-        res.json({
-            success: true,
-            data: suggestion
-        });
-
-    } catch (error) {
-        console.error("Suggest Salary Structure Error:", error);
-        res.status(500).json({ message: error.message });
-    }
-};
-
+/**
+ * @route POST /api/salary-structure/create
+ * @desc Create or Update Salary Structure (GLOBAL collection, tenant-safe)
+ */
 exports.createSalaryStructure = async (req, res) => {
     try {
-        const { candidateId, calculationMode, enteredCTC, earnings, deductions, employerContributions } = req.body;
+        const {
+            candidateId,
+            calculationMode,
+            enteredCTC,
+            earnings,
+            deductions,
+            employerContributions
+        } = req.body;
 
         if (!candidateId) {
             return res.status(400).json({ message: "Candidate ID is required" });
         }
 
         if (!enteredCTC || isNaN(Number(enteredCTC))) {
-            return res.status(400).json({ message: "Annual CTC (Source of Truth) is required." });
+            return res.status(400).json({ message: "Annual CTC is required and must be numeric" });
         }
 
-        // Use global SalaryStructure model
+        const tenantId = req.user?.tenant || req.user?.tenantId;
+        if (!tenantId) {
+            return res.status(400).json({ message: "Tenant ID missing in user context" });
+        }
+
         const { Applicant } = getModels(req);
 
-        // --- PERFORM AGGREGATION & VALIDATION ---
+        // 🔢 Salary Calculation (single source of truth)
         const result = calculateSalaryBreakup({
             enteredCTC: Number(enteredCTC),
             earnings: Array.isArray(earnings) ? earnings : [],
@@ -88,104 +55,45 @@ exports.createSalaryStructure = async (req, res) => {
             employerContributions: Array.isArray(employerContributions) ? employerContributions : []
         });
 
-        // REJECT if mismatch only in AUTO mode
+        // ❌ Block invalid AUTO calculation
         if (calculationMode === 'AUTO' && !result.isValid) {
             return res.status(400).json({
                 error: "CTC_MISMATCH",
-                message: `Calculated CTC (₹${result.receivedCTC.toLocaleString()}) does not match Entered CTC (₹${result.expectedCTC.toLocaleString()}). Difference: ₹${result.mismatchAmount.toLocaleString()}`,
-                expectedCTC: result.expectedCTC,
-                receivedCTC: result.receivedCTC
+                message: `Calculated CTC (₹${result.receivedCTC}) does not match Entered CTC (₹${result.expectedCTC})`,
+                mismatchAmount: result.mismatchAmount
             });
         }
 
-        // Ensure we have a tenant ID
-        const tenantId = req.user.tenant || req.user.tenantId;
-        if (!tenantId) {
-            return res.status(400).json({ success: false, message: 'Tenant ID is missing from user context' });
-        }
-
-        // --- PERSIST TO SINGLE SOURCE OF TRUTH (SalaryStructure Collection) ---
-        // Using GLOBAL model with tenantId filtering
+        // 🧱 Persist into ONE global collection
         const structureData = {
+            tenantId,
             candidateId,
-            tenantId: tenantId, // Multi-tenancy via data
             calculationMode: calculationMode || 'AUTO',
+
             earnings: result.earnings.map(e => ({
                 key: e.componentId || e._id,
                 label: e.name,
                 monthly: e.amount,
-                yearly: Number(e.amount) * 12,
-                type: 'earning',
-                isSelected: true
+                yearly: e.amount * 12,
+                type: 'earning'
             })),
+
             deductions: result.deductions.map(d => ({
                 key: d.componentId || d._id,
                 label: d.name,
                 monthly: d.amount,
-                yearly: Number(d.amount) * 12,
-                type: 'deduction',
-                isSelected: true
+                yearly: d.amount * 12,
+                type: 'deduction'
             })),
+
             employerBenefits: result.employerContributions.map(b => ({
                 key: b.componentId || b._id,
                 label: b.name,
                 monthly: b.amount,
-                yearly: Number(b.amount) * 12,
-                type: 'employer_benefit',
-                isSelected: true
+                yearly: b.amount * 12,
+                type: 'employer_benefit'
             })),
-            totals: {
-                grossEarnings: result.monthly.grossEarnings,
-                totalDeductions: result.monthly.totalDeductions,
-                netSalary: result.monthly.netSalary,
-                employerBenefits: result.monthly.employerContributions,
-                monthlyCTC: Math.round((result.annual.ctc / 12) * 100) / 100,
-                annualCTC: result.annual.ctc
-            },
-            validation: {
-                isValid: result.isValid,
-                mismatchAmount: result.mismatchAmount,
-                validatedAt: new Date()
-            },
-            updatedAt: new Date(),
-            updatedBy: req.user?.name || 'System'
-        };
 
-        const updatedStructure = await SalaryStructure.findOneAndUpdate(
-            { tenantId: tenantId, candidateId }, // Query by tenant + candidate
-            { $set: structureData },
-            { new: true, upsert: true }
-        );
-
-        // Also update the Applicant's flat CTC and FULL SNAPSHOT
-        const snapshot = {
-            earnings: structureData.earnings.map(e => ({
-                name: e.label,
-                monthlyAmount: e.monthly,
-                annualAmount: e.yearly
-            })),
-            employeeDeductions: structureData.deductions.map(d => ({
-                name: d.label,
-                monthlyAmount: d.monthly,
-                annualAmount: d.yearly
-            })),
-            employerContributions: structureData.employerBenefits.map(b => ({
-                name: b.label,
-                monthlyAmount: b.monthly,
-                annualAmount: b.yearly
-            })),
-            grossA: {
-                monthly: result.monthly.grossEarnings,
-                yearly: result.monthly.grossEarnings * 12
-            },
-            takeHome: {
-                monthly: result.monthly.netSalary,
-                yearly: result.monthly.netSalary * 12
-            },
-            ctc: {
-                monthly: Math.round(result.annual.ctc / 12),
-                yearly: result.annual.ctc
-            },
             totals: {
                 grossEarnings: result.monthly.grossEarnings,
                 totalDeductions: result.monthly.totalDeductions,
@@ -194,63 +102,73 @@ exports.createSalaryStructure = async (req, res) => {
                 monthlyCTC: Math.round(result.annual.ctc / 12),
                 annualCTC: result.annual.ctc
             },
-            calculatedAt: new Date()
+
+            validation: {
+                isValid: result.isValid,
+                mismatchAmount: result.mismatchAmount,
+                validatedAt: new Date()
+            },
+
+            updatedBy: req.user?.name || 'System',
+            updatedAt: new Date()
         };
 
+        const savedStructure = await SalaryStructure.findOneAndUpdate(
+            { tenantId, candidateId },
+            { $set: structureData },
+            { upsert: true, new: true }
+        );
+
+        // 🔄 Snapshot into Applicant (NO new collection)
         await Applicant.findByIdAndUpdate(candidateId, {
             $set: {
                 ctc: result.receivedCTC,
-                salarySnapshot: snapshot,
-                salaryStructureId: updatedStructure._id
+                salaryStructureId: savedStructure._id,
+                salarySnapshot: {
+                    earnings: structureData.earnings,
+                    deductions: structureData.deductions,
+                    employerBenefits: structureData.employerBenefits,
+                    totals: structureData.totals,
+                    calculatedAt: new Date()
+                }
             }
         });
 
-        res.json({
+        return res.json({
             success: true,
-            message: "Salary structure persisted to single source of truth.",
-            data: updatedStructure,
-            validation: {
-                isValid: result.isValid,
-                mismatchAmount: result.mismatchAmount
-            }
+            message: "Salary structure saved successfully",
+            data: savedStructure
         });
 
-    } catch (error) {
-        console.error("Create Salary Structure Error:", error);
-        res.status(500).json({ message: error.message });
+    } catch (err) {
+        console.error("❌ Salary Structure Error:", err);
+        return res.status(500).json({ message: err.message });
     }
 };
 
+/**
+ * @route GET /api/salary-structure/:candidateId
+ * @desc Fetch salary structure for candidate
+ */
 exports.getSalaryStructure = async (req, res) => {
     try {
         const { candidateId } = req.params;
+        const tenantId = req.user?.tenant || req.user?.tenantId;
 
-        // Ensure tenantId
-        const tenantId = req.user.tenant || req.user.tenantId;
         if (!tenantId) {
-            return res.status(400).json({
-                success: false,
-                message: 'Tenant ID is required'
-            });
+            return res.status(400).json({ message: "Tenant ID required" });
         }
 
-        // Use global SalaryStructure model (imported at top)
-        // Query with tenant filter
-        const structure = await SalaryStructure.findOne({
-            tenantId: tenantId,
-            candidateId
-        });
+        const structure = await SalaryStructure.findOne({ tenantId, candidateId });
 
         if (!structure) {
-            return res.status(404).json({
-                success: false,
-                message: "Salary structure not found for this candidate."
-            });
+            return res.status(404).json({ message: "Salary structure not found" });
         }
 
-        res.json(structure);
-    } catch (error) {
-        console.error('❌ Get Salary Structure Error:', error);
-        res.status(500).json({ message: error.message });
+        return res.json(structure);
+
+    } catch (err) {
+        console.error("❌ Get Salary Structure Error:", err);
+        return res.status(500).json({ message: err.message });
     }
 };

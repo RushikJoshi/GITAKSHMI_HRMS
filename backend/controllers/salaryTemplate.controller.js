@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const multer = require('multer');
 const XLSX = require('xlsx');
 
-const salaryCalculationService = require('../services/salaryCalculation.service');
+const SalaryEngine = require('../services/salaryEngine');
 // local helper
 const round2 = (v) => Math.round((v || 0) * 100) / 100;
 
@@ -35,11 +35,8 @@ const getModels = (req) => {
     }
 };
 
-/**
- * Perform server-side salary calculations to ensure integrity
- */
-// Delegate salary calculations to the centralized service to ensure single source of truth
-module.exports.calculateSalaryStructure = salaryCalculationService.calculateSalaryStructure;
+// DEPRECATED: Use SalaryEngine.calculate directly in services
+// module.exports.calculateSalaryStructure = salaryCalculationService.calculateSalaryStructure;
 
 
 
@@ -68,22 +65,22 @@ exports.calculateBreakup = async (req, res) => {
             });
         }
 
-        const { calculateSalaryBreakup } = require('../services/salaryBreakupCalculator');
+        // Prepare objects for the engine
+        const template = {
+            earnings: earnings.map(e => ({ name: e.name, code: e.code, formula: e.formula })),
+            employeeDeductions: deductions.map(d => ({ name: d.name, code: d.code, formula: d.formula })),
+            employerDeductions: benefits.map(b => ({ name: b.name, code: b.code, formula: b.formula }))
+        };
 
-        // Prepare arrays for the calculator
-        // If frontend sends complex objects, flatten them or pass as is
-        const result = calculateSalaryBreakup({
+        const result = await SalaryEngine.calculate({
             annualCTC: Number(targetCTC),
-            earnings: Array.isArray(earnings) ? earnings : [],
-            deductions: Array.isArray(deductions) ? deductions : [],
-            benefits: Array.isArray(benefits) ? benefits : [],
-            suggested: suggested === true || suggested === 'true'
+            template
         });
 
         return res.json({
             success: true,
             data: result,
-            message: result.isValid ? 'CTC calculation successful' : result.warnings[0]
+            message: 'CTC calculation successful'
         });
 
     } catch (error) {
@@ -740,53 +737,28 @@ exports.previewTemplate = async (req, res) => {
             return res.status(404).json({ success: false, error: 'Template not found' });
         }
 
-        // Use salary calculation service to get complete breakdown
-        const salaryCalculationService = require('../services/salaryCalculation.service');
-
-        // Allow overriding annualCTC via query parameter for interactive previews
+        // Use SalaryEngine to get complete breakdown
         const overrideAnnualCTC = req.query?.annualCTC ? Number(req.query.annualCTC) : null;
-        if (overrideAnnualCTC && !isNaN(overrideAnnualCTC)) {
-            try {
-                const calculated = await salaryCalculationService.calculateSalaryStructure(
-                    overrideAnnualCTC,
-                    template.earnings || [],
-                    template.settings || {},
-                    template.employeeDeductions || [],
-                    null, // benefitsInput - will be fetched
-                    req.tenantDB,
-                    tenantId
-                );
+        const targetCTC = overrideAnnualCTC || template.annualCTC || 0;
 
-                const salarySnapshot = {
-                    salaryTemplateId: template._id,
-                    earnings: calculated.earnings || [],
-                    employerContributions: calculated.benefits || calculated.employerContributions || [],
-                    employeeDeductions: calculated.deductions || calculated.employeeDeductions || [],
-                    grossA: { monthly: calculated.monthly.grossEarnings, yearly: calculated.yearly.grossEarnings },
-                    takeHome: { monthly: calculated.monthly.netSalary, yearly: calculated.yearly.netSalary },
-                    netSalary: { monthly: calculated.monthly.netSalary, yearly: calculated.yearly.netSalary },
-                    ctc: { monthly: calculated.monthly.ctc, yearly: calculated.yearly.totalCTC },
-                    calculatedAt: new Date()
-                };
-
-                return res.json({ success: true, data: salarySnapshot });
-            } catch (calcErr) {
-                console.error('[PREVIEW_TEMPLATE] Override calculation failed:', calcErr);
-                // Fallback to default template calculation below
-            }
+        if (!targetCTC) {
+            return res.status(400).json({ success: false, error: "Initial annualCTC not set in template and no override provided." });
         }
 
-        const calculated = await salaryCalculationService.calculateCompleteSalaryBreakdown(template, req.tenantDB, tenantId);
+        const calculated = await SalaryEngine.calculate({
+            annualCTC: targetCTC,
+            template
+        });
 
         const salarySnapshot = {
             salaryTemplateId: template._id,
             earnings: calculated.earnings || [],
-            employerContributions: calculated.benefits || calculated.employerContributions || [],
-            employeeDeductions: calculated.deductions || calculated.employeeDeductions || [],
-            grossA: { monthly: calculated.monthly.grossEarnings, yearly: calculated.yearly.grossEarnings },
-            takeHome: { monthly: calculated.monthly.netSalary, yearly: calculated.yearly.netSalary },
-            netSalary: { monthly: calculated.monthly.netSalary, yearly: calculated.yearly.netSalary },
-            ctc: { monthly: calculated.monthly.ctc, yearly: calculated.yearly.totalCTC },
+            employerContributions: calculated.benefits || [],
+            employeeDeductions: calculated.deductions || [],
+            grossA: { monthly: calculated.totals.grossMonthly, yearly: calculated.totals.annualCTC }, // Adjusting to match existing expected format if needed
+            takeHome: { monthly: calculated.totals.netMonthly, yearly: calculated.totals.netMonthly * 12 },
+            netSalary: { monthly: calculated.totals.netMonthly, yearly: calculated.totals.netMonthly * 12 },
+            ctc: { monthly: calculated.monthlyCTC, yearly: calculated.annualCTC },
             calculatedAt: new Date()
         };
 

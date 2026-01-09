@@ -15,7 +15,7 @@ const NATIONALITIES = [
 import ApplyLeaveForm from '../../components/ApplyLeaveForm';
 import SalaryAssignmentModal from '../../components/Payroll/SalaryAssignmentModal';
 import EmployeeProfileView from '../../components/EmployeeProfileView';
-import { Calendar as CalendarIcon, User, Search, Filter, Plus, FileText, Edit2, Trash2, Eye, DollarSign } from 'lucide-react';
+import { Calendar as CalendarIcon, User, Search, Filter, Plus, FileText, Edit2, Trash2, Eye, IndianRupee } from 'lucide-react';
 
 export default function Employees() {
   const [employees, setEmployees] = useState([]);
@@ -270,7 +270,7 @@ export default function Employees() {
                               <CalendarIcon className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600" />
                             </button>
                             <button onClick={() => setAssigningSalary(emp)} className="p-1.5 rounded hover:bg-purple-50 transition" title="Assign Salary Structure" aria-label="Assign Salary">
-                              <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600" />
+                              <IndianRupee className="h-4 w-4 sm:h-5 sm:w-5 text-purple-600" />
                             </button>
                             <button onClick={() => openEdit(emp)} className="p-1.5 rounded hover:bg-blue-50 transition" title="Edit" aria-label="Edit employee">
                               <Edit2 className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />

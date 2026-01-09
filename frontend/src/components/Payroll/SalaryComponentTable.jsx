@@ -15,9 +15,15 @@ export default function SalaryComponentTable({
                         <tr>
                             <th className="px-6 py-4">Name</th>
                             <th className="px-6 py-4">Type</th>
-                            <th className="px-6 py-4">Calculation / Frequency</th>
-                            <th className="px-6 py-4 text-center">PF Consideration</th>
-                            <th className="px-6 py-4 text-center">ESI Consideration</th>
+                            <th className="px-6 py-4">
+                                {data[0]?.category === 'Template' ? 'Annual CTC / Monthly' : 'Calculation / Frequency'}
+                            </th>
+                            {data[0]?.category !== 'Template' && (
+                                <>
+                                    <th className="px-6 py-4 text-center">PF Consideration</th>
+                                    <th className="px-6 py-4 text-center">ESI Consideration</th>
+                                </>
+                            )}
                             <th className="px-6 py-4">Status</th>
                             <th className="px-6 py-4 text-right">Actions</th>
                         </tr>
@@ -48,26 +54,39 @@ export default function SalaryComponentTable({
                                     </td>
                                     <td className="px-6 py-4 text-slate-600">
                                         <div className="flex flex-col">
-                                            <span>{item.calculationType}</span>
-                                            {item.frequency && (
-                                                <span className="text-xs text-slate-400">{item.frequency}</span>
+                                            {item.category === 'Template' ? (
+                                                <>
+                                                    <span className="font-bold text-slate-900">₹{item.annualCTC?.toLocaleString()} PA</span>
+                                                    <span className="text-xs text-slate-400">₹{item.monthlyCTC?.toLocaleString()} PM</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <span>{item.calculationType}</span>
+                                                    {item.frequency && (
+                                                        <span className="text-xs text-slate-400">{item.frequency}</span>
+                                                    )}
+                                                </>
                                             )}
                                         </div>
                                     </td>
-                                    <td className="px-6 py-4 text-center">
-                                        {item.considerForPF ? (
-                                            <CheckCircle className="w-4 h-4 text-emerald-500 mx-auto" />
-                                        ) : (
-                                            <span className="text-slate-300">-</span>
-                                        )}
-                                    </td>
-                                    <td className="px-6 py-4 text-center">
-                                        {item.considerForESI ? (
-                                            <CheckCircle className="w-4 h-4 text-emerald-500 mx-auto" />
-                                        ) : (
-                                            <span className="text-slate-300">-</span>
-                                        )}
-                                    </td>
+                                    {item.category !== 'Template' && (
+                                        <>
+                                            <td className="px-6 py-4 text-center">
+                                                {item.considerForPF ? (
+                                                    <CheckCircle className="w-4 h-4 text-emerald-500 mx-auto" />
+                                                ) : (
+                                                    <span className="text-slate-300">-</span>
+                                                )}
+                                            </td>
+                                            <td className="px-6 py-4 text-center">
+                                                {item.considerForESI ? (
+                                                    <CheckCircle className="w-4 h-4 text-emerald-500 mx-auto" />
+                                                ) : (
+                                                    <span className="text-slate-300">-</span>
+                                                )}
+                                            </td>
+                                        </>
+                                    )}
                                     <td className="px-6 py-4">
                                         <span
                                             className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${item.status === 'Active'
