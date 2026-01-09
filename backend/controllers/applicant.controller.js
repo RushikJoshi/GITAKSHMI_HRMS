@@ -636,7 +636,7 @@ exports.uploadSalaryExcel = async (req, res) => {
 exports.updateApplicantStatus = async (req, res) => {
     try {
         const { id } = req.params;
-        const { status, rating, feedback, stageName } = req.body;
+        const { status, rating, feedback, stageName, scorecard } = req.body;
 
         logToDebug(`🔥 [STATUS UPDATE REQUEST] ID: ${id}, Status: ${status}`);
 
@@ -660,11 +660,12 @@ exports.updateApplicantStatus = async (req, res) => {
         applicant.status = status;
 
         // --- SAVE REVIEW / FEEDBACK ---
-        if (rating || feedback) {
+        if (rating || feedback || scorecard) {
             applicant.reviews.push({
                 stage: stageName || status,
                 rating: rating,
                 feedback: feedback,
+                scorecard: scorecard,
                 interviewerName: req.user?.name || 'HR Team',
                 createdAt: new Date()
             });
@@ -714,3 +715,92 @@ exports.updateApplicantStatus = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 };
+
+// ==================== DOCUMENT UPLOAD FUNCTIONS ====================
+
+/**
+ * UPLOAD DOCUMENTS
+ * POST /api/requirements/applicants/:id/documents
+ */
+exports.uploadDocuments = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { Applicant } = getModels(req);
+
+        const applicant = await Applicant.findById(id);
+        if (!applicant) {
+            return res.status(404).json({ message: 'Applicant not found' });
+        }
+
+        // Process uploaded files
+        const documents = req.files.map((file, index) => ({
+            name: req.body[`documentNames[${index}]`] || file.originalname,
+            fileName: file.filename,
+            filePath: `/uploads/documents/${file.filename}`,
+            fileSize: file.size,
+            fileType: file.mimetype,
+            verified: false,
+            uploadedAt: new Date(),
+            uploadedBy: req.user?.name || 'HR Team'
+        }));
+
+        // Add to applicant's customDocuments array
+        if (!applicant.customDocuments) {
+            applicant.customDocuments = [];
+        }
+        applicant.customDocuments.push(...documents);
+
+        await applicant.save();
+
+        res.json({
+            success: true,
+            message: 'Documents uploaded successfully',
+            documents: applicant.customDocuments
+        });
+    } catch (error) {
+        console.error('Document upload error:', error);
+        res.status(500).json({
+            message: error.message || 'Failed to upload documents'
+        });
+    }
+};
+
+/**
+ * VERIFY DOCUMENT
+ * PATCH /api/requirements/applicants/:id/documents/:docIndex/verify
+ */
+exports.verifyDocument = async (req, res) => {
+    try {
+        const { id, docIndex } = req.params;
+        const { Applicant } = getModels(req);
+
+        const applicant = await Applicant.findById(id);
+        if (!applicant) {
+            return res.status(404).json({ message: 'Applicant not found' });
+        }
+
+        if (!applicant.customDocuments || !applicant.customDocuments[docIndex]) {
+            return res.status(404).json({ message: 'Document not found' });
+        }
+
+        // Mark document as verified
+        applicant.customDocuments[docIndex].verified = true;
+        applicant.customDocuments[docIndex].verifiedAt = new Date();
+        applicant.customDocuments[docIndex].verifiedBy = req.user?.name || 'HR Team';
+
+        await applicant.save();
+
+        res.json({
+            success: true,
+            message: 'Document verified successfully',
+            document: applicant.customDocuments[docIndex]
+        });
+    } catch (error) {
+        console.error('Document verification error:', error);
+        res.status(500).json({
+            message: error.message || 'Failed to verify document'
+        });
+    }
+};
+
+// ==================== END DOCUMENT FUNCTIONS ====================

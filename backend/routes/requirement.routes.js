@@ -76,4 +76,53 @@ const upload = multer({
 
 router.post('/applicants/:id/upload-salary-excel', auth.authenticate, auth.requireHr, upload.single('file'), applicantCtrl.uploadSalaryExcel);
 
+// ==================== DOCUMENT UPLOAD ROUTES ====================
+
+// Configure multer for document uploads
+const documentUploadDir = path.join(__dirname, '..', 'uploads', 'documents');
+if (!fs.existsSync(documentUploadDir)) fs.mkdirSync(documentUploadDir, { recursive: true });
+
+const documentStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, documentUploadDir);
+    },
+    filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, 'doc-' + uniqueSuffix + path.extname(file.originalname));
+    }
+});
+
+const documentUpload = multer({
+    storage: documentStorage,
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+    fileFilter: (req, file, cb) => {
+        const allowedTypes = /pdf|jpg|jpeg|png/;
+        const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+        const mimetype = allowedTypes.test(file.mimetype);
+
+        if (extname && mimetype) {
+            return cb(null, true);
+        } else {
+            cb(new Error('Only PDF, JPG, and PNG files are allowed'));
+        }
+    }
+});
+
+// POST /api/requirements/applicants/:id/documents - Upload documents
+router.post('/applicants/:id/documents',
+    auth.authenticate,
+    auth.requireHr,
+    documentUpload.array('documents', 10), // Max 10 files
+    applicantCtrl.uploadDocuments
+);
+
+// PATCH /api/requirements/applicants/:id/documents/:docIndex/verify - Verify document
+router.patch('/applicants/:id/documents/:docIndex/verify',
+    auth.authenticate,
+    auth.requireHr,
+    applicantCtrl.verifyDocument
+);
+
+// ==================== END DOCUMENT ROUTES ====================
+
 module.exports = router;
