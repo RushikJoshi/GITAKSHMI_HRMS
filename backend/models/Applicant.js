@@ -53,6 +53,7 @@ const ApplicantSchema = new mongoose.Schema({
     location: { type: String }, // Link/URL (if online) or Address (if offline)
     interviewerName: { type: String },
     notes: { type: String },
+    stage: { type: String }, // The stage this interview belongs to
     completed: { type: Boolean, default: false }
   },
 
@@ -66,11 +67,26 @@ const ApplicantSchema = new mongoose.Schema({
 
   // --- End Legacy ---
 
+  // Custom Documents (ID proof, certificates, etc.)
+  customDocuments: [{
+    name: { type: String, required: true },  // e.g., "Aadhar Card", "PAN Card"
+    fileName: { type: String, required: true },  // Actual file name on server
+    filePath: { type: String, required: true },  // Path to file
+    fileSize: { type: Number },  // File size in bytes
+    fileType: { type: String },  // MIME type
+    verified: { type: Boolean, default: false },
+    verifiedAt: { type: Date },
+    verifiedBy: { type: String },
+    uploadedAt: { type: Date, default: Date.now },
+    uploadedBy: { type: String }
+  }],
+
   // Review & Feedback System
   reviews: [{
     stage: { type: String },
-    rating: { type: Number, min: 1, max: 5 },
+    rating: { type: Number, min: 0, max: 5 },
     feedback: { type: String, trim: true },
+    scorecard: { type: Object }, // Store the full evaluation data
     interviewerName: { type: String },
     createdAt: { type: Date, default: Date.now }
   }],

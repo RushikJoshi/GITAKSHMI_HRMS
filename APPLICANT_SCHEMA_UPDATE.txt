@@ -1,0 +1,81 @@
+/**
+ * UPDATE APPLICANT MODEL SCHEMA
+ * Add this field to backend/models/Applicant.js
+ */
+
+// Add this to the ApplicantSchema definition:
+
+customDocuments: [{
+    name: { type: String, required: true },  // e.g., "Aadhar Card", "PAN Card"
+    fileName: { type: String, required: true },  // Actual file name on server
+    filePath: { type: String, required: true },  // Path to file
+    fileSize: { type: Number },  // File size in bytes
+    fileType: { type: String },  // MIME type
+    verified: { type: Boolean, default: false },
+    verifiedAt: { type: Date },
+    verifiedBy: { type: String },
+    uploadedAt: { type: Date, default: Date.now },
+    uploadedBy: { type: String }
+}],
+
+// Example full schema context:
+const ApplicantSchema = new mongoose.Schema({
+    name: { type: String, required: true },
+    email: { type: String, required: true },
+    mobile: { type: String },
+    requirementId: { type: mongoose.Schema.Types.ObjectId, ref: 'Requirement' },
+    status: { type: String, default: 'Applied' },
+    resume: { type: String },
+    offerLetterPath: { type: String },
+    joiningLetterPath: { type: String },
+    joiningDate: { type: Date },
+    
+    // Salary information
+    salarySnapshot: {
+        ctc: {
+            monthly: { type: Number },
+            yearly: { type: Number }
+        },
+        // ... other salary fields
+    },
+    
+    // Reviews and feedback
+    reviews: [{
+        stage: { type: String },
+        rating: { type: Number },
+        feedback: { type: String },
+        scorecard: { type: mongoose.Schema.Types.Mixed },
+        interviewerName: { type: String },
+        createdAt: { type: Date, default: Date.now }
+    }],
+    
+    // Interview details
+    interview: {
+        scheduled: { type: Boolean, default: false },
+        date: { type: Date },
+        time: { type: String },
+        mode: { type: String },
+        location: { type: String },
+        stage: { type: String },
+        completed: { type: Boolean, default: false }
+    },
+    
+    // 🆕 CUSTOM DOCUMENTS (ADD THIS)
+    customDocuments: [{
+        name: { type: String, required: true },
+        fileName: { type: String, required: true },
+        filePath: { type: String, required: true },
+        fileSize: { type: Number },
+        fileType: { type: String },
+        verified: { type: Boolean, default: false },
+        verifiedAt: { type: Date },
+        verifiedBy: { type: String },
+        uploadedAt: { type: Date, default: Date.now },
+        uploadedBy: { type: String }
+    }],
+    
+    createdAt: { type: Date, default: Date.now },
+    updatedAt: { type: Date, default: Date.now }
+});
+
+module.exports = ApplicantSchema;

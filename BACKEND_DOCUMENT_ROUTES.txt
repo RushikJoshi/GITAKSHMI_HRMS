@@ -1,0 +1,123 @@
+/**
+ * BACKEND API ENDPOINTS FOR DOCUMENT UPLOAD
+ * Add these routes to backend/routes/requirements.routes.js or applicant.routes.js
+ */
+
+const multer = require('multer');
+const path = require('path');
+
+// Configure multer for document uploads
+const documentStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        const uploadPath = path.join(__dirname, '../uploads/documents');
+        cb(null, uploadPath);
+    },
+    filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, 'doc-' + uniqueSuffix + path.extname(file.originalname));
+    }
+});
+
+const documentUpload = multer({
+    storage: documentStorage,
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+    fileFilter: (req, file, cb) => {
+        const allowedTypes = /pdf|jpg|jpeg|png/;
+        const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+        const mimetype = allowedTypes.test(file.mimetype);
+        
+        if (extname && mimetype) {
+            return cb(null, true);
+        } else {
+            cb(new Error('Only PDF, JPG, and PNG files are allowed'));
+        }
+    }
+});
+
+// POST /api/requirements/applicants/:id/documents
+router.post('/applicants/:id/documents', 
+    auth.authenticate, 
+    documentUpload.array('documents', 10), // Max 10 files
+    async (req, res) => {
+        try {
+            const { id } = req.params;
+            const { Applicant } = getModels(req);
+            
+            const applicant = await Applicant.findById(id);
+            if (!applicant) {
+                return res.status(404).json({ message: 'Applicant not found' });
+            }
+
+            // Process uploaded files
+            const documents = req.files.map((file, index) => ({
+                name: req.body[`documentNames[${index}]`] || file.originalname,
+                fileName: file.filename,
+                filePath: `/uploads/documents/${file.filename}`,
+                fileSize: file.size,
+                fileType: file.mimetype,
+                verified: false,
+                uploadedAt: new Date(),
+                uploadedBy: req.user?.name || 'HR Team'
+            }));
+
+            // Add to applicant's customDocuments array
+            if (!applicant.customDocuments) {
+                applicant.customDocuments = [];
+            }
+            applicant.customDocuments.push(...documents);
+            
+            await applicant.save();
+
+            res.json({
+                success: true,
+                message: 'Documents uploaded successfully',
+                documents: applicant.customDocuments
+            });
+        } catch (error) {
+            console.error('Document upload error:', error);
+            res.status(500).json({ 
+                message: error.message || 'Failed to upload documents' 
+            });
+        }
+    }
+);
+
+// PATCH /api/requirements/applicants/:id/documents/:docIndex/verify
+router.patch('/applicants/:id/documents/:docIndex/verify',
+    auth.authenticate,
+    async (req, res) => {
+        try {
+            const { id, docIndex } = req.params;
+            const { Applicant } = getModels(req);
+            
+            const applicant = await Applicant.findById(id);
+            if (!applicant) {
+                return res.status(404).json({ message: 'Applicant not found' });
+            }
+
+            if (!applicant.customDocuments || !applicant.customDocuments[docIndex]) {
+                return res.status(404).json({ message: 'Document not found' });
+            }
+
+            // Mark document as verified
+            applicant.customDocuments[docIndex].verified = true;
+            applicant.customDocuments[docIndex].verifiedAt = new Date();
+            applicant.customDocuments[docIndex].verifiedBy = req.user?.name || 'HR Team';
+            
+            await applicant.save();
+
+            res.json({
+                success: true,
+                message: 'Document verified successfully',
+                document: applicant.customDocuments[docIndex]
+            });
+        } catch (error) {
+            console.error('Document verification error:', error);
+            res.status(500).json({ 
+                message: error.message || 'Failed to verify document' 
+            });
+        }
+    }
+);
+
+module.exports = router;
