@@ -6,7 +6,7 @@ import OfferLetterPreview from '../../components/OfferLetterPreview';
 import AssignSalaryModal from '../../components/AssignSalaryModal';
 import { DatePicker, Pagination, Select } from 'antd';
 import dayjs from 'dayjs';
-import { Eye, Download, Edit2, RefreshCw, DollarSign, IndianRupee, Upload, FileText, CheckCircle, Settings, Plus, Trash2, X, GripVertical, Star, XCircle, Clock } from 'lucide-react';
+import { Eye, Download, Edit2, RefreshCw, IndianRupee, Upload, FileText, CheckCircle, Settings, Plus, Trash2, X, GripVertical, Star } from 'lucide-react';
 
 export default function Applicants() {
     const navigate = useNavigate();

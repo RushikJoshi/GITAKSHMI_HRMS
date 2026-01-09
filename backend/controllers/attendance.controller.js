@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const XLSX = require('xlsx');
 const AttendanceSchema = require('../models/Attendance');
 const AttendanceSettingsSchema = require('../models/AttendanceSettings');
 const EmployeeSchema = require('../models/Employee');
@@ -188,7 +189,7 @@ exports.punch = async (req, res) => {
                 const violationLog = new AuditLog({
                     tenant: tenantId,
                     entity: 'Attendance',
-                    entityId: null,
+                    entityId: employeeId,
                     action: 'PUNCH_GEO_VIOLATION',
                     performedBy: employeeId,
                     changes: { before: null, after: { latitude, longitude, error: geoValidation.error } },
@@ -211,7 +212,7 @@ exports.punch = async (req, res) => {
                 const violationLog = new AuditLog({
                     tenant: tenantId,
                     entity: 'Attendance',
-                    entityId: null,
+                    entityId: employeeId,
                     action: 'PUNCH_IP_VIOLATION',
                     performedBy: employeeId,
                     changes: { before: null, after: { ip: clientIP, error: ipValidation.error } },
@@ -801,6 +802,188 @@ exports.getHRStats = async (req, res) => {
         });
 
     } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+/**
+ * POST /api/attendance/upload-excel
+ * Upload attendance from Excel
+ */
+exports.uploadExcel = async (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ error: "Excel file is required" });
+
+        const { Attendance, Employee, AuditLog, AttendanceSettings } = getModels(req);
+        const tenantId = req.tenantId;
+
+        const workbook = XLSX.read(req.file.buffer, { type: 'buffer', cellDates: true });
+        const sheetName = workbook.SheetNames[0];
+        const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: "" });
+
+        if (rows.length === 0) return res.status(400).json({ error: "Excel sheet is empty" });
+
+        const results = {
+            success: 0,
+            failed: 0,
+            errors: []
+        };
+
+        // Cache settings
+        let settings = await AttendanceSettings.findOne({ tenant: tenantId });
+        if (!settings) settings = new AttendanceSettings({ tenant: tenantId });
+
+        // Normalize header names
+        const normalize = (s) => s ? s.toString().toLowerCase().replace(/\s/g, '').replace(/[^a-z0-9]/g, '') : '';
+
+        for (let i = 0; i < rows.length; i++) {
+            const row = rows[i];
+            const rowIdx = i + 2; // 1-indexed + header row
+
+            try {
+                // Find column names
+                let empIdVal = "";
+                let dateVal = null;
+                let statusVal = "";
+                let checkInVal = null;
+                let checkOutVal = null;
+
+                for (const key of Object.keys(row)) {
+                    const normKey = normalize(key);
+                    const val = row[key];
+
+                    if (normKey.includes('employeeid') || normKey.includes('empid') || normKey === 'id' || normKey === 'code') {
+                        empIdVal = val.toString().trim();
+                    } else if (normKey === 'date' || normKey.includes('attendancedate') || normKey.includes('punchdate')) {
+                        dateVal = val;
+                    } else if (normKey === 'status') {
+                        statusVal = val.toString().trim().toLowerCase();
+                    } else if (normKey.includes('checkin') || normKey.includes('punchin') || normKey === 'in') {
+                        checkInVal = val;
+                    } else if (normKey.includes('checkout') || normKey.includes('punchout') || normKey === 'out') {
+                        checkOutVal = val;
+                    }
+                }
+
+                if (!empIdVal) throw new Error("Employee ID is missing");
+                if (!dateVal) throw new Error("Date is missing");
+
+                // Find Employee
+                const employee = await Employee.findOne({
+                    tenant: tenantId,
+                    $or: [{ employeeId: empIdVal }, { customId: empIdVal }]
+                });
+                if (!employee) throw new Error(`Employee not found with ID: ${empIdVal}`);
+
+                // Process Date
+                let attendanceDate = new Date(dateVal);
+                if (isNaN(attendanceDate.getTime())) throw new Error(`Invalid date format: ${dateVal}`);
+                attendanceDate.setHours(0, 0, 0, 0);
+
+                // Default status if missing
+                if (!statusVal) statusVal = 'present';
+
+                // Find or Create Attendance
+                let attendance = await Attendance.findOne({
+                    tenant: tenantId,
+                    employee: employee._id,
+                    date: attendanceDate
+                });
+
+                if (!attendance) {
+                    attendance = new Attendance({
+                        tenant: tenantId,
+                        employee: employee._id,
+                        date: attendanceDate
+                    });
+                }
+
+                attendance.status = statusVal;
+
+                // Process Punch Times if they are Date objects or strings
+                const parseTime = (val, baseDate) => {
+                    if (!val) return null;
+                    if (val instanceof Date) return val;
+                    // Try to parse string time like "09:00"
+                    if (typeof val === 'string' && val.includes(':')) {
+                        const [h, m] = val.split(':').map(Number);
+                        const d = new Date(baseDate);
+                        d.setHours(h, m || 0, 0, 0);
+                        return d;
+                    }
+                    return null;
+                };
+
+                const checkIn = parseTime(checkInVal, attendanceDate);
+                const checkOut = parseTime(checkOutVal, attendanceDate);
+
+                if (checkIn) {
+                    attendance.checkIn = checkIn;
+                    // Also check late mark
+                    const [h, m] = settings.shiftStartTime.split(':').map(Number);
+                    const shiftStart = new Date(attendanceDate);
+                    shiftStart.setHours(h, m, 0, 0);
+                    const grace = settings.graceTimeMinutes || 0;
+                    if (checkIn > new Date(shiftStart.getTime() + grace * 60000)) {
+                        attendance.isLate = true;
+                    }
+                }
+
+                if (checkOut) {
+                    attendance.checkOut = checkOut;
+                    // Also check early out
+                    const [h, m] = settings.shiftEndTime.split(':').map(Number);
+                    const shiftEnd = new Date(attendanceDate);
+                    shiftEnd.setHours(h, m, 0, 0);
+                    if (checkOut < shiftEnd) {
+                        attendance.isEarlyOut = true;
+                    }
+                }
+
+                // Sync Logs for consistency if we have punch times
+                if (checkIn || checkOut) {
+                    attendance.logs = [];
+                    if (checkIn) attendance.logs.push({ time: checkIn, type: 'IN', location: 'Excel Upload', device: 'System' });
+                    if (checkOut) attendance.logs.push({ time: checkOut, type: 'OUT', location: 'Excel Upload', device: 'System' });
+
+                    attendance.workingHours = calculateWorkingHours(attendance.logs);
+                }
+
+                attendance.isManualOverride = true;
+                attendance.overrideReason = "Bulk Excel Upload";
+                attendance.approvedBy = req.user.id;
+
+                await attendance.save();
+                results.success++;
+
+            } catch (err) {
+                results.failed++;
+                results.errors.push({ row: rowIdx, error: err.message });
+            }
+        }
+
+        // Log the bulk action
+        const bulkLog = new AuditLog({
+            tenant: tenantId,
+            entity: 'AttendanceBatch',
+            entityId: req.user.id,
+            action: 'BULK_UPLOAD_EXCEL',
+            performedBy: req.user.id,
+            meta: {
+                file: req.file.originalname,
+                successCount: results.success,
+                failCount: results.failed
+            }
+        });
+        await bulkLog.save();
+
+        res.json({
+            message: `Bulk upload completed: ${results.success} succeeded, ${results.failed} failed.`,
+            data: results
+        });
+
+    } catch (error) {
+        console.error("Bulk upload error:", error);
         res.status(500).json({ error: error.message });
     }
 };

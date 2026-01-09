@@ -1039,23 +1039,60 @@ exports.generateJoiningLetter = async (req, res) => {
         }
 
 
-        // 3. Prepare Data - FETCH FROM SalaryStructure Collection (Single Source of Truth)
-        let salaryComponents = [];
-        const struct = await SalaryStructure.findOne({ candidateId: applicantId }).lean();
+        // 3. Prepare Data - FETCH FROM EmployeeSalarySnapshot (Single Source of Truth)
+        const EmployeeSalarySnapshot = req.tenantDB.model('EmployeeSalarySnapshot');
+        const snapshot = await EmployeeSalarySnapshot.findOne({ applicant: applicantId }).sort({ createdAt: -1 }).lean();
 
-        if (!struct) {
-            console.error(`[JOINING LETTER] SalaryStructure not found for candidate: ${applicantId}.`);
-            return res.status(400).json({ message: "Salary structure not configured. Please complete Salary Configuration first." });
+        if (!snapshot) {
+            console.error(`[JOINING LETTER] EmployeeSalarySnapshot not found for applicant: ${applicantId}.`);
+            return res.status(400).json({ message: "Salary snapshot not found. Please complete Salary Assignment first." });
         }
 
-        const processed = processCandidateSalary(struct);
-        const { earnings, deductions, benefits, totals, flatData } = processed;
-        req.calculatedSalaryData = processed;
+        // Helper to format currency
+        const cur = (val) => Math.round(val || 0).toLocaleString('en-IN');
+        const annual = (monthly) => monthly * 12;
+
+        const earnings = snapshot.earnings || [];
+        const deductions = snapshot.deductions || [];
+        const benefits = snapshot.benefits || [];
+
+        const totalEarningsAnnual = earnings.reduce((sum, e) => sum + e.annualAmount, 0);
+        const totalBenefitsAnnual = benefits.reduce((sum, b) => sum + b.annualAmount, 0);
+        const totalDeductionsAnnual = deductions.reduce((sum, d) => sum + d.annualAmount, 0);
+
+        const grossAAnnual = totalEarningsAnnual;
+        const netAnnual = totalEarningsAnnual - totalDeductionsAnnual;
+        const totalCTCAnnual = totalEarningsAnnual + totalBenefitsAnnual;
+
+        const totals = {
+            grossA: { monthly: Math.round(grossAAnnual / 12), yearly: Math.round(grossAAnnual), formattedM: cur(grossAAnnual / 12), formattedY: cur(grossAAnnual) },
+            deductions: { monthly: Math.round(totalDeductionsAnnual / 12), yearly: Math.round(totalDeductionsAnnual), formattedM: cur(totalDeductionsAnnual / 12), formattedY: cur(totalDeductionsAnnual) },
+            net: { monthly: Math.round(netAnnual / 12), yearly: Math.round(netAnnual), formattedM: cur(netAnnual / 12), formattedY: cur(netAnnual) },
+            computedCTC: { monthly: Math.round(totalCTCAnnual / 12), yearly: Math.round(totalCTCAnnual), formattedM: cur(totalCTCAnnual / 12), formattedY: cur(totalCTCAnnual) }
+        };
+
+        const flatData = {};
+        earnings.forEach(e => { flatData[e.code] = cur(e.monthlyAmount); flatData[`${e.code}_ANNUAL`] = cur(e.annualAmount); });
+        deductions.forEach(d => { flatData[d.code] = cur(d.monthlyAmount); flatData[`${d.code}_ANNUAL`] = cur(d.annualAmount); });
+        benefits.forEach(b => { flatData[b.code] = cur(b.monthlyAmount); flatData[`${b.code}_ANNUAL`] = cur(b.annualAmount); });
+
+        req.calculatedSalaryData = {
+            earnings: earnings.map(e => ({ name: e.name, monthly: cur(e.monthlyAmount), yearly: cur(e.annualAmount) })),
+            deductions: deductions.map(d => ({ name: d.name, monthly: cur(d.monthlyAmount), yearly: cur(d.annualAmount) })),
+            benefits: benefits.map(b => ({ name: b.name, monthly: cur(b.monthlyAmount), yearly: cur(b.annualAmount) })),
+            totals,
+            flatData
+        };
         req.flatSalaryData = flatData;
 
         // --- BUILD TABLE ---
+        const salaryComponents = [];
+        const earningsList = req.calculatedSalaryData.earnings;
+        const deductionsList = req.calculatedSalaryData.deductions;
+        const benefitsList = req.calculatedSalaryData.benefits;
+
         salaryComponents.push({ name: 'A – Monthly Benefits', monthly: '', yearly: '' });
-        earnings.forEach(e => {
+        earningsList.forEach(e => {
             salaryComponents.push({ name: e.name, monthly: e.monthly, yearly: e.yearly });
         });
         salaryComponents.push({
@@ -1065,14 +1102,14 @@ exports.generateJoiningLetter = async (req, res) => {
         });
 
         salaryComponents.push({ name: '', monthly: '', yearly: '' }); // Separator
-        deductions.forEach(d => {
+        deductionsList.forEach(d => {
             salaryComponents.push({ name: d.name, monthly: d.monthly, yearly: d.yearly });
         });
         salaryComponents.push({ name: 'Total Deductions (B)', monthly: totals.deductions.formattedM, yearly: totals.deductions.formattedY });
         salaryComponents.push({ name: 'Net Salary Payable (A-B)', monthly: totals.net.formattedM, yearly: totals.net.formattedY });
 
         salaryComponents.push({ name: '', monthly: '', yearly: '' }); // Separator
-        benefits.forEach(b => {
+        benefitsList.forEach(b => {
             salaryComponents.push({ name: b.name, monthly: b.monthly, yearly: b.yearly });
         });
         salaryComponents.push({ name: 'TOTAL CTC (A+C)', monthly: totals.computedCTC.formattedM, yearly: totals.computedCTC.formattedY });
@@ -1080,7 +1117,7 @@ exports.generateJoiningLetter = async (req, res) => {
         console.log("salaryComponents (FINAL STRICT) =>", salaryComponents);
 
         // A. Basic Placeholders
-        const basicData = joiningLetterUtils.mapOfferToJoiningData(applicant, {}, struct);
+        const basicData = joiningLetterUtils.mapOfferToJoiningData(applicant, {}, snapshot);
 
         // Build complete salaryStructure object for template
         const salaryStructure = {
@@ -1618,188 +1655,87 @@ exports.previewJoiningLetter = async (req, res) => {
             return res.status(400).json({ message: "Template load failed", error: error.message });
         }
 
-        // 3. Validate salary snapshot exists (for preview, warn but allow)
-        if (!applicant.salarySnapshot) {
-            console.warn('⚠️ [PREVIEW JOINING LETTER] Salary snapshot missing for applicant:', applicantId);
-            // For preview, we allow it but log a warning
+        // 3. Prepare Data - FETCH FROM EmployeeSalarySnapshot (Single Source of Truth)
+        const EmployeeSalarySnapshot = req.tenantDB.model('EmployeeSalarySnapshot');
+        const snapshot = await EmployeeSalarySnapshot.findOne({ applicant: applicantId }).sort({ createdAt: -1 }).lean();
+
+        if (!snapshot) {
+            console.error(`[PREVIEW JOINING LETTER] EmployeeSalarySnapshot not found for applicant: ${applicantId}.`);
+            return res.status(400).json({ message: "Salary snapshot not found. Please complete Salary Assignment first." });
         }
 
-        const joiningLetterUtils = require('../utils/joiningLetterUtils');
-        const explicitStructure = await SalaryStructure.findOne({ candidateId: applicantId }).lean();
-        const basicData = joiningLetterUtils.mapOfferToJoiningData(applicant, {}, explicitStructure);
+        // Helper to format currency
+        const cur = (val) => Math.round(val || 0).toLocaleString('en-IN');
 
-        // 4. Prepare Data - FETCH FROM SalaryStructure Collection (Single Source of Truth)
-        let salaryComponents = [];
+        const earnings = snapshot.earnings || [];
+        const deductions = snapshot.deductions || [];
+        const benefits = snapshot.benefits || [];
 
-        if (!explicitStructure) {
-            console.warn(`[PREVIEW JOINING LETTER] SalaryStructure not found for candidate: ${applicantId}.`);
+        const totalEarningsAnnual = earnings.reduce((sum, e) => sum + e.annualAmount, 0);
+        const totalBenefitsAnnual = benefits.reduce((sum, b) => sum + b.annualAmount, 0);
+        const totalDeductionsAnnual = deductions.reduce((sum, d) => sum + d.annualAmount, 0);
 
-            req.calculatedSalaryData = {
-                earnings: [], deductions: [], benefits: [],
-                totals: {
-                    computedCTC: { formattedM: '0', formattedY: '0' },
-                    net: { formattedM: '0', formattedY: '0' }
-                }
-            };
-            req.flatSalaryData = {};
-        } else {
-            console.log('✅ [PREVIEW JOINING LETTER] Using explicit salaryStructureConfig from Applicant record');
+        const grossAAnnual = totalEarningsAnnual;
+        const netAnnual = totalEarningsAnnual - totalDeductionsAnnual;
+        const totalCTCAnnual = totalEarningsAnnual + totalBenefitsAnnual;
 
-            const { earnings, deductions, benefits, earningsList, deductionsList, employerList, totals, flatData } = processCandidateSalary(explicitStructure);
+        const totals = {
+            grossA: { monthly: Math.round(grossAAnnual / 12), yearly: Math.round(grossAAnnual), formattedM: cur(grossAAnnual / 12), formattedY: cur(grossAAnnual) },
+            deductions: { monthly: Math.round(totalDeductionsAnnual / 12), yearly: Math.round(totalDeductionsAnnual), formattedM: cur(totalDeductionsAnnual / 12), formattedY: cur(totalDeductionsAnnual) },
+            net: { monthly: Math.round(netAnnual / 12), yearly: Math.round(netAnnual), formattedM: cur(netAnnual / 12), formattedY: cur(netAnnual) },
+            computedCTC: { monthly: Math.round(totalCTCAnnual / 12), yearly: Math.round(totalCTCAnnual), formattedM: cur(totalCTCAnnual / 12), formattedY: cur(totalCTCAnnual) }
+        };
 
-            // --- BUILD TABLE (Align with User Template) ---
-            salaryComponents.push({ name: 'A – Monthly Benefits', monthly: '', yearly: '' });
-            if (earnings && earnings.length > 0) {
-                earnings.forEach(e => {
-                    salaryComponents.push({ name: e.name, monthly: e.monthly, yearly: e.yearly });
-                });
-            }
-            salaryComponents.push({
-                name: 'GROSS A',
-                monthly: totals.grossA?.formattedM || totals.earnings?.formattedM || '0',
-                yearly: totals.grossA?.formattedY || totals.earnings?.formattedY || '0'
-            });
+        const flatData = {};
+        earnings.forEach(e => { flatData[e.code] = cur(e.monthlyAmount); flatData[`${e.code}_ANNUAL`] = cur(e.annualAmount); });
+        deductions.forEach(d => { flatData[d.code] = cur(d.monthlyAmount); flatData[`${d.code}_ANNUAL`] = cur(d.annualAmount); });
+        benefits.forEach(b => { flatData[b.code] = cur(b.monthlyAmount); flatData[`${b.code}_ANNUAL`] = cur(b.annualAmount); });
 
-            salaryComponents.push({ name: '', monthly: '', yearly: '' }); // Separator
-            if (deductions && deductions.length > 0) {
-                deductions.forEach(d => {
-                    salaryComponents.push({ name: d.name, monthly: d.monthly, yearly: d.yearly });
-                });
-            }
-            salaryComponents.push({ name: 'Total Deductions (B)', monthly: totals.deductions?.formattedM || '0', yearly: totals.deductions?.formattedY || '0' });
-            salaryComponents.push({ name: 'Net Salary Payable (A-B)', monthly: totals.net?.formattedM || '0', yearly: totals.net?.formattedY || '0' });
+        req.calculatedSalaryData = {
+            earnings: earnings.map(e => ({ name: e.name, monthly: cur(e.monthlyAmount), yearly: cur(e.annualAmount) })),
+            deductions: deductions.map(d => ({ name: d.name, monthly: cur(d.monthlyAmount), yearly: cur(d.annualAmount) })),
+            benefits: benefits.map(b => ({ name: b.name, monthly: cur(b.monthlyAmount), yearly: cur(b.annualAmount) })),
+            totals,
+            flatData
+        };
+        req.flatSalaryData = flatData;
 
-            salaryComponents.push({ name: '', monthly: '', yearly: '' }); // Separator
-            salaryComponents.push({ name: 'B – Annual Benefits', monthly: '', yearly: '' });
-            salaryComponents.push({ name: 'GROSS B', monthly: totals.grossB?.formattedM || '0', yearly: totals.grossB?.formattedY || '0' });
+        // --- BUILD TABLE ---
+        const salaryComponents = [];
+        const earningsList = req.calculatedSalaryData.earnings;
+        const deductionsList = req.calculatedSalaryData.deductions;
+        const benefitsList = req.calculatedSalaryData.benefits;
 
-            salaryComponents.push({ name: '', monthly: '', yearly: '' }); // Separator
-            salaryComponents.push({ name: 'Retirals Company\'s Benefits', monthly: '', yearly: '' });
-            if (benefits && benefits.length > 0) {
-                benefits.forEach(b => {
-                    salaryComponents.push({ name: b.name, monthly: b.monthly, yearly: b.yearly });
-                });
-            }
-            salaryComponents.push({ name: 'GROSS C', monthly: totals.grossC?.formattedM || totals.employer?.formattedM || '0', yearly: totals.grossC?.formattedY || totals.employer?.formattedY || '0' });
+        salaryComponents.push({ name: 'A – Monthly Benefits', monthly: '', yearly: '' });
+        earningsList.forEach(e => {
+            salaryComponents.push({ name: e.name, monthly: e.monthly, yearly: e.yearly });
+        });
+        salaryComponents.push({
+            name: 'GROSS A',
+            monthly: totals.grossA.formattedM,
+            yearly: totals.grossA.formattedY
+        });
 
-            salaryComponents.push({ name: '', monthly: '', yearly: '' }); // Separator
-            salaryComponents.push({ name: 'Computed CTC (A+B+C)', monthly: totals.computedCTC?.formattedM || totals.ctc?.formattedM || '0', yearly: totals.computedCTC?.formattedY || totals.ctc?.formattedY || '0' });
+        salaryComponents.push({ name: '', monthly: '', yearly: '' }); // Separator
+        deductionsList.forEach(d => {
+            salaryComponents.push({ name: d.name, monthly: d.monthly, yearly: d.yearly });
+        });
+        salaryComponents.push({ name: 'Total Deductions (B)', monthly: totals.deductions.formattedM, yearly: totals.deductions.formattedY });
+        salaryComponents.push({ name: 'Net Salary Payable (A-B)', monthly: totals.net.formattedM, yearly: totals.net.formattedY });
 
-            // Store calculated separate lists for template usage (NEW FORMAT)
-            // Ensure arrays are never null/undefined (safeguard)
-            req.calculatedSalaryData = {
-                // New format: ALL arrays (no filtering) - Template will handle display
-                earnings: Array.isArray(earnings) ? earnings : (Array.isArray(earningsList) ? earningsList : []),
-                deductions: Array.isArray(deductions) ? deductions : (Array.isArray(deductionsList) ? deductionsList : []),
-                benefits: Array.isArray(benefits) ? benefits : (Array.isArray(employerList) ? employerList : []),
-                // Legacy format for backward compatibility
-                earningsList: Array.isArray(earningsList) ? earningsList : [],
-                deductionsList: Array.isArray(deductionsList) ? deductionsList : [],
-                employerList: Array.isArray(employerList) ? employerList : [],
-                // Totals (with safeguards)
-                totals: totals || {
-                    grossA: { monthly: 0, yearly: 0, formattedM: '0', formattedY: '0' },
-                    grossB: { monthly: 0, yearly: 0, formattedM: '0', formattedY: '0' },
-                    grossC: { monthly: 0, yearly: 0, formattedM: '0', formattedY: '0' },
-                    netSalary: { monthly: 0, yearly: 0 },
-                    totalCTC: { monthly: 0, yearly: 0 },
-                    computedCTC: { monthly: 0, yearly: 0, formattedM: '0', formattedY: '0' },
-                    earnings: { valM: 0, valY: 0, formattedM: '0', formattedY: '0' },
-                    deductions: { valM: 0, valY: 0, formattedM: '0', formattedY: '0' },
-                    employer: { valM: 0, valY: 0, formattedM: '0', formattedY: '0' },
-                    net: { valM: 0, valY: 0, formattedM: '0', formattedY: '0' },
-                    ctc: { valM: 0, valY: 0, formattedM: '0', formattedY: '0' }
-                },
-                totalEarningsMonthly: totals?.earnings?.formattedM || '0',
-                totalEarningsYearly: totals?.earnings?.formattedY || '0',
-                totalDeductionsMonthly: totals?.deductions?.formattedM || '0',
-                totalDeductionsYearly: totals?.deductions?.formattedY || '0',
-                totalBenefitsMonthly: totals?.employer?.formattedM || '0',
-                totalBenefitsYearly: totals?.employer?.formattedY || '0',
-                netPayMonthly: totals?.net?.formattedM || '0',
-                netPayYearly: totals?.net?.formattedY || '0',
-                totalCTCMonthly: totals?.ctc?.formattedM || '0',
-                totalCTCYearly: totals?.ctc?.formattedY || '0'
-            };
-            req.flatSalaryData = flatData;
-        }
+        salaryComponents.push({ name: '', monthly: '', yearly: '' }); // Separator
+        salaryComponents.push({ name: 'B – Annual Benefits', monthly: '', yearly: '' });
+        salaryComponents.push({ name: 'GROSS B', monthly: '0', yearly: '0' });
 
-        // Final fallback to snapshot ONLY if structure failed AND we must provide something
-        if (salaryComponents.length === 0 && applicant.salarySnapshot) {
-            console.warn('⚠️ [PREVIEW JOINING LETTER] Fallback to Snapshot (Strict Filter) - Calculating Totals');
+        salaryComponents.push({ name: '', monthly: '', yearly: '' }); // Separator
+        salaryComponents.push({ name: 'Retirals Company\'s Benefits', monthly: '', yearly: '' });
+        benefitsList.forEach(b => {
+            salaryComponents.push({ name: b.name, monthly: b.monthly, yearly: b.yearly });
+        });
+        salaryComponents.push({ name: 'GROSS C', monthly: totals.computedCTC.formattedM, yearly: totals.computedCTC.formattedY });
 
-            // Accumulators separate for fallback
-            let fbTotalEarningsM = 0;
-            let fbTotalEarningsY = 0;
-            let fbTotalDeductionsM = 0;
-            let fbTotalDeductionsY = 0;
-
-            const fbEarningsList = [];
-            const fbDeductionsList = [];
-
-            const formatCurrency = (val) => (Number(val) || 0).toLocaleString('en-IN');
-
-            // Earnings
-            if (applicant.salarySnapshot.earnings) {
-                applicant.salarySnapshot.earnings.forEach(item => {
-                    const mM = Number(item.monthlyAmount) || 0;
-                    const mY = Number(item.annualAmount) || 0;
-                    if (mM > 0 || mY > 0) {
-                        fbEarningsList.push({
-                            name: item.name,
-                            monthly: formatCurrency(mM),
-                            yearly: formatCurrency(mY)
-                        });
-                        fbTotalEarningsM += mM;
-                        fbTotalEarningsY += mY;
-                    }
-                });
-            }
-
-            // Deductions
-            if (applicant.salarySnapshot.employeeDeductions) {
-                applicant.salarySnapshot.employeeDeductions.forEach(item => {
-                    const mM = Number(item.monthlyAmount) || 0;
-                    const mY = Number(item.annualAmount) || 0;
-                    if (mM > 0 || mY > 0) {
-                        fbDeductionsList.push({
-                            name: item.name,
-                            monthly: formatCurrency(mM),
-                            yearly: formatCurrency(mY)
-                        });
-                        fbTotalDeductionsM += mM;
-                        fbTotalDeductionsY += mY;
-                    }
-                });
-            }
-
-            // Calculate Net
-            const netM = fbTotalEarningsM - fbTotalDeductionsM;
-            const netY = fbTotalEarningsY - fbTotalDeductionsY;
-
-            // Build Table (Full Layout)
-            if (fbEarningsList.length > 0) {
-                // Header: A - Monthly Benefits (User Requested)
-                salaryComponents.push({ name: 'A – Monthly Benefits', monthly: '', yearly: '' });
-
-                // 1. Earnings
-                salaryComponents.push(...fbEarningsList);
-                // 2. Total Earnings
-                salaryComponents.push({ name: 'Total Earnings (A)', monthly: formatCurrency(fbTotalEarningsM), yearly: formatCurrency(fbTotalEarningsY) });
-
-                // 3. Separator
-                salaryComponents.push({ name: '', monthly: '', yearly: '' });
-
-                // 4. Deductions
-                salaryComponents.push(...fbDeductionsList);
-
-                // 5. Total Deductions
-                salaryComponents.push({ name: 'Total Deductions (B)', monthly: formatCurrency(fbTotalDeductionsM), yearly: formatCurrency(fbTotalDeductionsY) });
-
-                // 6. Net Salary
-                salaryComponents.push({ name: 'Net Salary Payable (A-B)', monthly: formatCurrency(netM), yearly: formatCurrency(netY) });
-            }
-        }
+        salaryComponents.push({ name: '', monthly: '', yearly: '' }); // Separator
+        salaryComponents.push({ name: 'Computed CTC (A+B+C)', monthly: totals.computedCTC.formattedM, yearly: totals.computedCTC.formattedY });
 
         console.log("preview salaryComponents (FINAL STRICT) =>", salaryComponents);
 

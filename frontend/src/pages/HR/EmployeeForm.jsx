@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import api from '../../utils/api';
 import { message, DatePicker } from 'antd';
-import { DollarSign } from 'lucide-react';
+import { IndianRupee } from 'lucide-react';
 import dayjs from 'dayjs';
 import { formatDateDDMMYYYY } from '../../utils/dateUtils';
 
@@ -1924,7 +1924,7 @@ export default function EmployeeForm({ employee, onClose, viewOnly = false }) {
             {/* Header */}
             <div className="flex justify-between items-center border-b border-slate-200 pb-3">
               <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                <DollarSign className="w-5 h-5 text-emerald-600" />
+                <IndianRupee className="w-5 h-5 text-emerald-600" />
                 Payroll / Compensation
               </h3>
               <span className="px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full text-xs font-semibold">

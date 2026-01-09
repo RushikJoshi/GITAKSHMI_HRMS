@@ -108,6 +108,7 @@ app.use('/api/salary-structure', salaryStructureRoutes);
 app.use('/api/activities', activityRoutes); // Moved here
 // Moved from above to ensure tenantDB is available
 app.use('/api/payroll', payrollRoutes);
+app.use('/api/payroll-engine', require('./routes/payrollEngine.routes'));
 app.use('/api/payroll-rules', payrollRuleRoutes);
 app.use('/api/tracker', require('./routes/tracker.routes'));
 app.use('/api/hr/candidate-status', require('./routes/tracker.routes'));

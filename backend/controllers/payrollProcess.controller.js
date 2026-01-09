@@ -51,7 +51,7 @@ exports.getProcessEmployees = async (req, res) => {
             const attendanceCount = await Attendance.countDocuments({
                 employee: emp._id,
                 date: { $gte: startDate, $lte: endDate },
-                status: { $in: ['Present', 'Half Day', 'Work from Home'] }
+                status: { $in: ['present', 'half_day'] } // Matching the schema enum
             });
 
             return {

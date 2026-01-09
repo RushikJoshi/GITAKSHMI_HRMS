@@ -3,6 +3,7 @@ const router = express.Router();
 const auth = require('../middleware/auth.jwt');
 const reqCtrl = require('../controllers/requirement.controller');
 const applicantCtrl = require('../controllers/applicant.controller');
+const salaryCtrl = require('../controllers/salary.controller');
 // const offerCtrl = require('../controllers/offer.controller');
 
 // Protect all routes with authentication and HR role
@@ -31,7 +32,11 @@ router.get('/applicants', reqCtrl.getApplicants);
 // router.post('/offer-letter/:applicantId', offerCtrl.generateOfferLetter);
 
 // Applicant Salary Assignment Routes (HR Only)
-router.post('/applicants/:id/assign-salary', auth.authenticate, auth.requireHr, applicantCtrl.assignSalary);
+router.post('/applicants/:id/assign-salary', (req, res, next) => {
+    // Adapter for legacy route to new controller
+    req.body.applicantId = req.params.id;
+    next();
+}, salaryCtrl.assign);
 router.patch('/applicants/:id/status', auth.authenticate, auth.requireHr, applicantCtrl.updateApplicantStatus);
 router.get('/applicants/:id', auth.authenticate, auth.requireHr, applicantCtrl.getApplicantById);
 router.get('/applicants/:id/salary', auth.authenticate, auth.requireHr, applicantCtrl.getSalary);
@@ -74,7 +79,7 @@ const upload = multer({
     }
 });
 
-router.post('/applicants/:id/upload-salary-excel', auth.authenticate, auth.requireHr, upload.single('file'), applicantCtrl.uploadSalaryExcel);
+// router.post('/applicants/:id/upload-salary-excel', auth.authenticate, auth.requireHr, upload.single('file'), applicantCtrl.uploadSalaryExcel);
 
 // ==================== DOCUMENT UPLOAD ROUTES ====================
 

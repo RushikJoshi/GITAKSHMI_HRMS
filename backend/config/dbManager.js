@@ -64,6 +64,9 @@ function registerModels(db, tenantId) {
     const CandidateStatusLogSchema = require("../models/CandidateStatusLog");
     const SalaryAssignmentSchema = require("../models/SalaryAssignment");
     const PayrollRunItemSchema = require("../models/PayrollRunItem");
+    const EmployeeSalarySnapshotSchema = require("../models/EmployeeSalarySnapshot");
+    const AttendanceSnapshotSchema = require("../models/AttendanceSnapshot");
+    const PayrollRunSnapshotSchema = require("../models/PayrollRunSnapshot");
 
     // Register models using connection.model() - only register if not already registered
     if (!db.models.Employee) db.model("Employee", EmployeeSchema);
@@ -103,6 +106,9 @@ function registerModels(db, tenantId) {
     if (!db.models.CandidateStatusLog) db.model("CandidateStatusLog", CandidateStatusLogSchema);
     if (!db.models.SalaryAssignment) db.model("SalaryAssignment", SalaryAssignmentSchema);
     if (!db.models.PayrollRunItem) db.model("PayrollRunItem", PayrollRunItemSchema);
+    if (!db.models.EmployeeSalarySnapshot) db.model("EmployeeSalarySnapshot", EmployeeSalarySnapshotSchema);
+    if (!db.models.AttendanceSnapshot) db.model("AttendanceSnapshot", AttendanceSnapshotSchema);
+    if (!db.models.PayrollRunSnapshot) db.model("PayrollRunSnapshot", PayrollRunSnapshotSchema);
 
     // Dynamic Requirement Forms
     const RequirementTemplateSchema = require("../models/RequirementTemplate");
