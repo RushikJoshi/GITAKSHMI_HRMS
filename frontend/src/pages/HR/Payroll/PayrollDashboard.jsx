@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../../utils/api';
-import { DollarSign, Users, TrendingUp, Calendar, ArrowRight, Play, FileText, PieChart } from 'lucide-react';
+import { IndianRupee, Users, TrendingUp, Calendar, ArrowRight, Play, FileText, PieChart } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function PayrollDashboard() {
@@ -95,7 +95,7 @@ export default function PayrollDashboard() {
                             title="Last Payroll Cost"
                             value={`₹${stats.lastMonthPayout.toLocaleString()}`}
                             subtitle="Net Pay Disbursed"
-                            icon={DollarSign}
+                            icon={IndianRupee}
                             color="bg-emerald-500"
                         />
                         <StatCard

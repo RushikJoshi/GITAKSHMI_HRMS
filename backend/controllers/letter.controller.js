@@ -1039,23 +1039,60 @@ exports.generateJoiningLetter = async (req, res) => {
         }
 
 
-        // 3. Prepare Data - FETCH FROM SalaryStructure Collection (Single Source of Truth)
-        let salaryComponents = [];
-        const struct = await SalaryStructure.findOne({ candidateId: applicantId }).lean();
+        // 3. Prepare Data - FETCH FROM EmployeeSalarySnapshot (Single Source of Truth)
+        const EmployeeSalarySnapshot = req.tenantDB.model('EmployeeSalarySnapshot');
+        const snapshot = await EmployeeSalarySnapshot.findOne({ applicant: applicantId }).sort({ createdAt: -1 }).lean();
 
-        if (!struct) {
-            console.error(`[JOINING LETTER] SalaryStructure not found for candidate: ${applicantId}.`);
-            return res.status(400).json({ message: "Salary structure not configured. Please complete Salary Configuration first." });
+        if (!snapshot) {
+            console.error(`[JOINING LETTER] EmployeeSalarySnapshot not found for applicant: ${applicantId}.`);
+            return res.status(400).json({ message: "Salary snapshot not found. Please complete Salary Assignment first." });
         }
 
-        const processed = processCandidateSalary(struct);
-        const { earnings, deductions, benefits, totals, flatData } = processed;
-        req.calculatedSalaryData = processed;
+        // Helper to format currency
+        const cur = (val) => Math.round(val || 0).toLocaleString('en-IN');
+        const annual = (monthly) => monthly * 12;
+
+        const earnings = snapshot.earnings || [];
+        const deductions = snapshot.deductions || [];
+        const benefits = snapshot.benefits || [];
+
+        const totalEarningsAnnual = earnings.reduce((sum, e) => sum + e.amount, 0);
+        const totalBenefitsAnnual = benefits.reduce((sum, b) => sum + b.amount, 0);
+        const totalDeductionsAnnual = deductions.reduce((sum, d) => sum + d.amount, 0);
+
+        const grossAAnnual = totalEarningsAnnual;
+        const netAnnual = totalEarningsAnnual - totalDeductionsAnnual;
+        const totalCTCAnnual = totalEarningsAnnual + totalBenefitsAnnual;
+
+        const totals = {
+            grossA: { monthly: Math.round(grossAAnnual / 12), yearly: Math.round(grossAAnnual), formattedM: cur(grossAAnnual / 12), formattedY: cur(grossAAnnual) },
+            deductions: { monthly: Math.round(totalDeductionsAnnual / 12), yearly: Math.round(totalDeductionsAnnual), formattedM: cur(totalDeductionsAnnual / 12), formattedY: cur(totalDeductionsAnnual) },
+            net: { monthly: Math.round(netAnnual / 12), yearly: Math.round(netAnnual), formattedM: cur(netAnnual / 12), formattedY: cur(netAnnual) },
+            computedCTC: { monthly: Math.round(totalCTCAnnual / 12), yearly: Math.round(totalCTCAnnual), formattedM: cur(totalCTCAnnual / 12), formattedY: cur(totalCTCAnnual) }
+        };
+
+        const flatData = {};
+        earnings.forEach(e => { flatData[e.code] = cur(e.amount / 12); flatData[`${e.code}_ANNUAL`] = cur(e.amount); });
+        deductions.forEach(d => { flatData[d.code] = cur(d.amount / 12); flatData[`${d.code}_ANNUAL`] = cur(d.amount); });
+        benefits.forEach(b => { flatData[b.code] = cur(b.amount / 12); flatData[`${b.code}_ANNUAL`] = cur(b.amount); });
+
+        req.calculatedSalaryData = {
+            earnings: earnings.map(e => ({ name: e.name, monthly: cur(e.amount / 12), yearly: cur(e.amount) })),
+            deductions: deductions.map(d => ({ name: d.name, monthly: cur(d.amount / 12), yearly: cur(d.amount) })),
+            benefits: benefits.map(b => ({ name: b.name, monthly: cur(b.amount / 12), yearly: cur(b.amount) })),
+            totals,
+            flatData
+        };
         req.flatSalaryData = flatData;
 
         // --- BUILD TABLE ---
+        const salaryComponents = [];
+        const earningsList = req.calculatedSalaryData.earnings;
+        const deductionsList = req.calculatedSalaryData.deductions;
+        const benefitsList = req.calculatedSalaryData.benefits;
+
         salaryComponents.push({ name: 'A – Monthly Benefits', monthly: '', yearly: '' });
-        earnings.forEach(e => {
+        earningsList.forEach(e => {
             salaryComponents.push({ name: e.name, monthly: e.monthly, yearly: e.yearly });
         });
         salaryComponents.push({
@@ -1065,14 +1102,14 @@ exports.generateJoiningLetter = async (req, res) => {
         });
 
         salaryComponents.push({ name: '', monthly: '', yearly: '' }); // Separator
-        deductions.forEach(d => {
+        deductionsList.forEach(d => {
             salaryComponents.push({ name: d.name, monthly: d.monthly, yearly: d.yearly });
         });
         salaryComponents.push({ name: 'Total Deductions (B)', monthly: totals.deductions.formattedM, yearly: totals.deductions.formattedY });
         salaryComponents.push({ name: 'Net Salary Payable (A-B)', monthly: totals.net.formattedM, yearly: totals.net.formattedY });
 
         salaryComponents.push({ name: '', monthly: '', yearly: '' }); // Separator
-        benefits.forEach(b => {
+        benefitsList.forEach(b => {
             salaryComponents.push({ name: b.name, monthly: b.monthly, yearly: b.yearly });
         });
         salaryComponents.push({ name: 'TOTAL CTC (A+C)', monthly: totals.computedCTC.formattedM, yearly: totals.computedCTC.formattedY });
@@ -1080,7 +1117,7 @@ exports.generateJoiningLetter = async (req, res) => {
         console.log("salaryComponents (FINAL STRICT) =>", salaryComponents);
 
         // A. Basic Placeholders
-        const basicData = joiningLetterUtils.mapOfferToJoiningData(applicant, {}, struct);
+        const basicData = joiningLetterUtils.mapOfferToJoiningData(applicant, {}, snapshot);
 
         // Build complete salaryStructure object for template
         const salaryStructure = {

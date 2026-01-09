@@ -14,8 +14,9 @@ class FormulaEngine {
     this.visited.add(code);
     const expr = this.formulas[code];
     if (!expr) throw new Error(`No formula for ${code}`);
-    // Replace variable codes in formula with their values
-    const resolvedExpr = expr.replace(/([A-Z_]+)/g, (match) => {
+    // Replace variable codes in formula with their values, avoiding Math functions
+    const resolvedExpr = expr.replace(/\b([A-Z_]+)\b/g, (match) => {
+      if (match === 'Math') return 'Math'; // Explicitly allow Math
       if (context[match] !== undefined) return context[match];
       if (this.formulas[match]) return this.evaluate(match, context);
       throw new Error(`Unknown variable ${match} in formula for ${code}`);

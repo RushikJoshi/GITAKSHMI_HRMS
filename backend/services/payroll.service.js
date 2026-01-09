@@ -587,6 +587,7 @@ async function calculatePostTaxDeductions(
 }
 
 module.exports = {
-    runPayroll
+    runPayroll,
+    calculateEmployeePayroll
 };
 

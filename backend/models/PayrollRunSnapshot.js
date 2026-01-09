@@ -20,4 +20,4 @@ const PayrollRunSnapshotSchema = new mongoose.Schema({
 
 PayrollRunSnapshotSchema.index({ tenant: 1, period: 1 }, { unique: true });
 
-module.exports = mongoose.model('PayrollRunSnapshot', PayrollRunSnapshotSchema);
+module.exports = PayrollRunSnapshotSchema;

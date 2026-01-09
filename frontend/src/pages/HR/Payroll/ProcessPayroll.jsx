@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Table, message, Select, Checkbox, Button, DatePicker, Tag, Tooltip } from 'antd';
-import { PlayCircle, Calculator, FileText, AlertCircle, DollarSign, Calendar } from 'lucide-react';
+import { PlayCircle, Calculator, FileText, AlertCircle, IndianRupee, Calendar } from 'lucide-react';
 import api from '../../../utils/api';
 import dayjs from 'dayjs';
 
@@ -212,7 +212,7 @@ const ProcessPayroll = () => {
                     <h3 className="font-semibold text-slate-700">Employee List ({employees.length})</h3>
                     <div className="flex gap-2">
                         <Button
-                            icon={<DollarSign size={16} />}
+                            icon={<IndianRupee size={16} />}
                             onClick={calculatePreview}
                             loading={calculating}
                             disabled={selectedRowKeys.length === 0}
