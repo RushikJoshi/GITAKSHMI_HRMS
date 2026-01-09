@@ -10,6 +10,13 @@ const applicantCtrl = require('../controllers/applicant.controller');
 router.use(auth.authenticate);
 router.use(auth.requireHr);
 
+const reqTmplCtrl = require('../controllers/requirementTemplate.controller');
+
+// Template Management Routes
+router.get('/template', reqTmplCtrl.getTemplate);
+router.put('/template', reqTmplCtrl.updateTemplate);
+router.post('/template/reset', reqTmplCtrl.resetTemplate);
+
 // Routes
 router.post('/create', reqCtrl.createRequirement);
 router.patch('/:id/status', reqCtrl.updateStatus);
@@ -19,6 +26,7 @@ router.get('/internal-jobs', reqCtrl.getInternalJobs);
 router.post('/internal-apply/:id', reqCtrl.applyInternal);
 router.get('/my-applications', reqCtrl.getMyApplications);
 router.get('/list', reqCtrl.getRequirements);
+router.get('/', reqCtrl.getRequirements); // Added to support GET /api/requirements
 router.get('/applicants', reqCtrl.getApplicants);
 // router.post('/offer-letter/:applicantId', offerCtrl.generateOfferLetter);
 

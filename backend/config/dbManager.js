@@ -104,6 +104,10 @@ function registerModels(db, tenantId) {
     if (!db.models.SalaryAssignment) db.model("SalaryAssignment", SalaryAssignmentSchema);
     if (!db.models.PayrollRunItem) db.model("PayrollRunItem", PayrollRunItemSchema);
 
+    // Dynamic Requirement Forms
+    const RequirementTemplateSchema = require("../models/RequirementTemplate");
+    if (!db.models.RequirementTemplate) db.model("RequirementTemplate", RequirementTemplateSchema);
+
 
     registeredModels.add(tenantId);
     console.log(`✅ [DB_MANAGER] Models registered successfully for tenant: ${tenantId}`);

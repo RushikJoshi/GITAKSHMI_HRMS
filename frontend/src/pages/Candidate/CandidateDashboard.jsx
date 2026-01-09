@@ -1,17 +1,36 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom'; // Removed Link
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../../utils/api';
 import { useAuth } from '../../context/AuthContext';
 
 export default function CandidateDashboard() {
     const { user, logout } = useAuth();
     const navigate = useNavigate();
-    const [activeTab, setActiveTab] = useState('jobs'); // 'jobs' or 'applications'
+    const [searchParams, setSearchParams] = useSearchParams();
+
+    // Get tab from URL or default to 'jobs'
+    const initialTab = searchParams.get('tab') || 'jobs';
+    const [activeTab, setActiveTab] = useState(initialTab);
+
     const [profile, setProfile] = useState(null);
     const [applications, setApplications] = useState([]);
     const [jobs, setJobs] = useState([]);
     const [loading, setLoading] = useState(true);
     const [tenantId, setTenantId] = useState(user?.tenantId || localStorage.getItem('tenantId'));
+
+    // Update URL when tab changes internally
+    const handleTabChange = (tab) => {
+        setActiveTab(tab);
+        setSearchParams({ tab });
+    };
+
+    useEffect(() => {
+        // Sync state if URL param changes externally (e.g. back button)
+        const tab = searchParams.get('tab');
+        if (tab && tab !== activeTab) {
+            setActiveTab(tab);
+        }
+    }, [searchParams]);
 
     useEffect(() => {
         async function loadData() {
@@ -23,10 +42,6 @@ export default function CandidateDashboard() {
                 setApplications(dashboardRes.data.applications);
 
                 // Load Open Jobs
-                // We need tenantId. Dashboard response implies we are logged in, so we have user.tenantId
-                // But api.get('/public/jobs') needs query param if no header? 
-                // Auth header usually handles tenantId context if middleware supports it.
-                // Public/Jobs endpoint expects `req.query.tenantId`.
                 if (tenantId) {
                     const jobsRes = await api.get(`/public/jobs?tenantId=${tenantId}`);
                     setJobs(jobsRes.data);
@@ -56,7 +71,10 @@ export default function CandidateDashboard() {
             {/* Sidebar / Profile Section */}
             <aside className="w-full md:w-80 bg-white shadow-md z-10 flex-shrink-0">
                 <div className="p-6 border-b border-gray-200">
-                    <div className="flex items-center space-x-4">
+                    <div
+                        className="flex items-center space-x-4 cursor-pointer hover:bg-gray-50 p-2 rounded-lg transition"
+                        onClick={() => handleTabChange('profile')}
+                    >
                         <div className="h-16 w-16 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-2xl font-bold">
                             {profile?.name?.charAt(0) || 'U'}
                         </div>
@@ -76,7 +94,7 @@ export default function CandidateDashboard() {
                     <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">Menu</h3>
                     <nav className="space-y-2">
                         <button
-                            onClick={() => setActiveTab('jobs')}
+                            onClick={() => handleTabChange('jobs')}
                             className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-md transition-colors ${activeTab === 'jobs' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-50'
                                 }`}
                         >
@@ -86,7 +104,7 @@ export default function CandidateDashboard() {
                             Open Positions
                         </button>
                         <button
-                            onClick={() => setActiveTab('applications')}
+                            onClick={() => handleTabChange('applications')}
                             className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-md transition-colors ${activeTab === 'applications' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-50'
                                 }`}
                         >
@@ -94,6 +112,16 @@ export default function CandidateDashboard() {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                             </svg>
                             My Applications
+                        </button>
+                        <button
+                            onClick={() => handleTabChange('profile')}
+                            className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-md transition-colors ${activeTab === 'profile' ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-50'
+                                }`}
+                        >
+                            <svg className="mr-3 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                            </svg>
+                            My Profile
                         </button>
                     </nav>
                 </div>
@@ -137,7 +165,7 @@ export default function CandidateDashboard() {
                                                     </div>
                                                     {isApplied ? (
                                                         <button
-                                                            onClick={() => setActiveTab('applications')}
+                                                            onClick={() => handleTabChange('applications')}
                                                             className="px-4 py-2 bg-green-100 text-green-700 text-sm font-medium rounded-md hover:bg-green-200 focus:outline-none transition"
                                                         >
                                                             ✓ View Status
@@ -165,7 +193,7 @@ export default function CandidateDashboard() {
                                     {applications.length === 0 ? (
                                         <div className="text-center py-10 bg-white rounded-lg border border-gray-200">
                                             <p className="text-gray-500">You haven't applied to any jobs yet.</p>
-                                            <button onClick={() => setActiveTab('jobs')} className="mt-4 text-blue-600 font-medium hover:text-blue-500">
+                                            <button onClick={() => handleTabChange('jobs')} className="mt-4 text-blue-600 font-medium hover:text-blue-500">
                                                 Browse Jobs
                                             </button>
                                         </div>
@@ -185,10 +213,41 @@ export default function CandidateDashboard() {
                                                         {app.status}
                                                     </span>
                                                 </div>
-                                                {/* Progress Bar logic could go here */}
                                             </div>
                                         ))
                                     )}
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'profile' && (
+                            <div>
+                                <h1 className="text-2xl font-bold text-gray-900 mb-6">My Profile</h1>
+                                <div className="bg-white shadow-sm rounded-lg border border-gray-200 p-6">
+                                    <div className="flex items-start">
+                                        <div className="h-24 w-24 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-4xl font-bold flex-shrink-0">
+                                            {profile?.name?.charAt(0) || 'U'}
+                                        </div>
+                                        <div className="ml-6 flex-1">
+                                            <h2 className="text-2xl font-bold text-gray-900">{profile?.name}</h2>
+                                            <p className="text-gray-500">{profile?.email}</p>
+                                            <p className="text-gray-500">{profile?.mobile}</p>
+
+                                            <div className="mt-6 border-t border-gray-100 pt-6">
+                                                <h3 className="text-lg font-medium text-gray-900 mb-4">Account Information</h3>
+                                                <dl className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-6">
+                                                    <div>
+                                                        <dt className="text-sm font-medium text-gray-500">Email</dt>
+                                                        <dd className="mt-1 text-sm text-gray-900">{profile?.email}</dd>
+                                                    </div>
+                                                    <div>
+                                                        <dt className="text-sm font-medium text-gray-500">Member Since</dt>
+                                                        <dd className="mt-1 text-sm text-gray-900">{new Date(profile?.createdAt || Date.now()).toLocaleDateString()}</dd>
+                                                    </div>
+                                                </dl>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         )}

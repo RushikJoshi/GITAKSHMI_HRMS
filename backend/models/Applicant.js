@@ -39,7 +39,7 @@ const ApplicantSchema = new mongoose.Schema({
   resume: { type: String, trim: true }, // File path or URL
 
   // Offer Details
-  status: { type: String, enum: ['Applied', 'Shortlisted', 'Selected', 'Rejected'], default: 'Applied' },
+  status: { type: String, default: 'Applied' },
   offerLetterPath: { type: String },
   offerRefCode: { type: String }, // Reference code from offer letter
   joiningLetterPath: { type: String }, // Path to generated joining letter PDF
@@ -52,7 +52,8 @@ const ApplicantSchema = new mongoose.Schema({
     mode: { type: String, enum: ['Online', 'Offline'] },
     location: { type: String }, // Link/URL (if online) or Address (if offline)
     interviewerName: { type: String },
-    notes: { type: String }
+    notes: { type: String },
+    completed: { type: Boolean, default: false }
   },
 
   // Salary Assignment (before joining letter)
@@ -144,6 +145,15 @@ const ApplicantSchema = new mongoose.Schema({
     ctc: { monthly: Number, yearly: Number },
     updatedAt: { type: Date, default: Date.now }
   },
+
+  // Review & Feedback System
+  reviews: [{
+    stage: { type: String },
+    rating: { type: Number, min: 1, max: 5 },
+    feedback: { type: String, trim: true },
+    interviewerName: { type: String },
+    createdAt: { type: Date, default: Date.now }
+  }],
 
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }

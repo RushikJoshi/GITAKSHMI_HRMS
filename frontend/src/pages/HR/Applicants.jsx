@@ -4,32 +4,234 @@ import api from '../../utils/api'; // Centralized axios instance with auth & ten
 import { useAuth } from '../../context/AuthContext';
 import OfferLetterPreview from '../../components/OfferLetterPreview';
 import AssignSalaryModal from '../../components/AssignSalaryModal';
-import { DatePicker, Pagination } from 'antd';
+import { DatePicker, Pagination, Select } from 'antd';
 import dayjs from 'dayjs';
-import { Eye, Download, Edit2, RefreshCw, DollarSign, IndianRupee, Upload, FileText, CheckCircle } from 'lucide-react';
+import { Eye, Download, Edit2, RefreshCw, DollarSign, IndianRupee, Upload, FileText, CheckCircle, Settings, Plus, Trash2, X, GripVertical, Star } from 'lucide-react';
 
 export default function Applicants() {
     const navigate = useNavigate();
     const [applicants, setApplicants] = useState([]);
     const [loading, setLoading] = useState(false);
 
-    // Tab State: 'new' | 'interview' | 'final'
+    const [requirements, setRequirements] = useState([]);
+    const [selectedRequirement, setSelectedRequirement] = useState(null); // Full requirement object
+    const [selectedReqId, setSelectedReqId] = useState('all');
+
+    // Tab State: Dynamic based on Requirement Workflow
+    // Start with default tabs for 'all' view
     const [activeTab, setActiveTab] = useState('new');
+    const [workflowTabs, setWorkflowTabs] = useState(['new', 'interview', 'final']);
+
+
+
+    // Workflow Editing State
+    const [showWorkflowEditModal, setShowWorkflowEditModal] = useState(false);
+    const [editingWorkflow, setEditingWorkflow] = useState([]);
+    const [newStageName, setNewStageName] = useState('');
+
+    const openWorkflowEditor = () => {
+        if (!selectedRequirement) return;
+        // Ensure we have at least the basic structure if empty
+        const current = selectedRequirement.workflow && selectedRequirement.workflow.length > 0
+            ? [...selectedRequirement.workflow]
+            : ['Applied', 'Shortlisted', 'Interview', 'Finalized'];
+        setEditingWorkflow(current);
+        setShowWorkflowEditModal(true);
+    };
+
+    const handleStageAdd = () => {
+        if (newStageName.trim()) {
+            // Insert before 'Finalized' if it exists to keep logical order, or just append
+            const newList = [...editingWorkflow];
+            const finalIdx = newList.indexOf('Finalized');
+            if (finalIdx !== -1) {
+                newList.splice(finalIdx, 0, newStageName.trim());
+            } else {
+                newList.push(newStageName.trim());
+            }
+            setEditingWorkflow(newList);
+            setNewStageName('');
+        }
+    };
+
+    const handleStageRemove = (index) => {
+        const newList = [...editingWorkflow];
+        newList.splice(index, 1);
+        setEditingWorkflow(newList);
+    };
+
+    const saveWorkflowChanges = async () => {
+        if (!selectedRequirement) return;
+        try {
+            setLoading(true);
+            await api.put(`/requirements/${selectedRequirement._id}`, {
+                workflow: editingWorkflow
+            });
+
+            // Refresh requirements to reflect changes
+            const res = await api.get('/requirements');
+            setRequirements(res.data || []);
+
+            // Update current selection
+            const updatedReq = res.data.find(r => r._id === selectedRequirement._id);
+            setSelectedRequirement(updatedReq);
+
+            // Trigger tab recalc
+            // logic in useEffect will handle it based on updated selectedRequirement
+
+            setShowWorkflowEditModal(false);
+            alert('Workflow updated successfully!');
+        } catch (err) {
+            console.error(err);
+            alert('Failed to update workflow');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+
+    useEffect(() => {
+        // Fetch Requirements for dropdown
+        async function fetchReqs() {
+            try {
+                const res = await api.get('/requirements');
+                setRequirements(res.data || []);
+            } catch (err) {
+                console.error("Failed to load requirements", err);
+            }
+        }
+        fetchReqs();
+    }, []);
+
+    // Handle Requirement Selection
+    const handleRequirementChange = (reqId) => {
+        setSelectedReqId(reqId);
+        if (reqId === 'all') {
+            setSelectedRequirement(null);
+            // setWorkflowTabs handle by useEffect
+            setActiveTab('new');
+        } else {
+            const req = requirements.find(r => r._id === reqId);
+            setSelectedRequirement(req);
+
+            // Set default active tab
+            if (req && req.workflow && req.workflow.length > 0) {
+                setActiveTab(req.workflow[0]);
+            } else {
+                setActiveTab('Applied');
+            }
+        }
+    };
+
+    // Dynamic Tab Calculation (Includes Custom/Ad-hoc Stages)
+    useEffect(() => {
+        if (selectedReqId === 'all') {
+            setWorkflowTabs(['new', 'interview', 'final']);
+        } else if (selectedRequirement) {
+            let baseParams = selectedRequirement.workflow && selectedRequirement.workflow.length > 0
+                ? [...selectedRequirement.workflow]
+                : ['Applied', 'Shortlisted', 'Interview', 'Finalized'];
+
+            // Find "Ad-hoc" statuses from current applicants for this job
+            const relevantApplicants = applicants.filter(a => a.requirementId?._id === selectedReqId || a.requirementId === selectedReqId);
+            const foundStatuses = [...new Set(relevantApplicants.map(a => a.status))];
+
+            const extraStatuses = foundStatuses.filter(s =>
+                !baseParams.includes(s) &&
+                !['Selected', 'Rejected', 'Finalized', 'Offer Generated', 'Salary Assigned', 'Interview Scheduled', 'Interview Rescheduled', 'Interview Completed', 'New Round'].includes(s)
+            );
+
+            // Insert extra statuses before 'Finalized' if present, else append
+            const finalIndex = baseParams.indexOf('Finalized');
+            if (finalIndex > -1) {
+                baseParams.splice(finalIndex, 0, ...extraStatuses);
+            } else {
+                baseParams.push(...extraStatuses);
+            }
+
+            setWorkflowTabs(baseParams);
+        }
+    }, [selectedReqId, selectedRequirement, applicants]);
+
+    // Custom Stage State
+    const [isCustomStageModalVisible, setIsCustomStageModalVisible] = useState(false);
+    const [customStageName, setCustomStageName] = useState('');
+    const [candidateForCustomStage, setCandidateForCustomStage] = useState(null);
+
+    const handleAddCustomStage = async () => {
+        if (!customStageName.trim() || !candidateForCustomStage) return;
+        await updateStatus(candidateForCustomStage, customStageName);
+        setIsCustomStageModalVisible(false);
+        setCustomStageName('');
+        setCandidateForCustomStage(null);
+    };
+
+    // Drag and Drop Refs
+    const dragItem = React.useRef(null);
+    const dragOverItem = React.useRef(null);
+
+    const handleSort = () => {
+        // duplicate items
+        let _workflowItems = [...editingWorkflow];
+
+        // remove and save the dragged item content
+        const draggedItemContent = _workflowItems.splice(dragItem.current, 1)[0];
+
+        // switch the position
+        _workflowItems.splice(dragOverItem.current, 0, draggedItemContent);
+
+        // reset the position ref
+        dragItem.current = null;
+        dragOverItem.current = null;
+
+        // update the actual array
+        setEditingWorkflow(_workflowItems);
+    };
 
     const getFilteredApplicants = () => {
-        if (activeTab === 'new') {
-            return applicants.filter(a => a.status === 'Applied');
-        } else if (activeTab === 'interview') {
-            return applicants.filter(a => ['Shortlisted', 'Interview Scheduled', 'Interview Rescheduled', 'Interview Completed'].includes(a.status));
-        } else if (activeTab === 'final') {
-            return applicants.filter(a => ['Selected', 'Rejected'].includes(a.status));
+        // First filter by Requirement ID
+        let filtered = applicants;
+        if (selectedReqId !== 'all') {
+            filtered = applicants.filter(a => a.requirementId?._id === selectedReqId || a.requirementId === selectedReqId);
         }
+
+        // Then filter by Active Tab (Stage)
+        if (selectedReqId === 'all') {
+            // Default "All Jobs" buckets logic
+            if (activeTab === 'new') {
+                return filtered.filter(a => a.status === 'Applied');
+            } else if (activeTab === 'interview') {
+                return filtered.filter(a => ['Shortlisted', 'Interview Scheduled', 'Interview Rescheduled', 'Interview Completed', 'New Round'].some(s => a.status.includes(s) || a.status.includes('Round')));
+            } else if (activeTab === 'final') {
+                return filtered.filter(a => ['Selected', 'Rejected', 'Finalized'].includes(a.status));
+            }
+        } else {
+            // Specific Job Workflow Logic
+            // In this mode, activeTab IS the status name (e.g. "Technical Round")
+            // BUT strict equality might miss generic statuses if not careful.
+            // For custom workflows, we assign status exactly as the stage name.
+
+            // Special case: 'Finalized' tab usually holds both 'Selected' and 'Rejected' 
+            if (activeTab === 'Finalized') {
+                return filtered.filter(a => ['Selected', 'Rejected', 'Finalized'].includes(a.status));
+            }
+
+            return filtered.filter(a => {
+                if (a.status === activeTab) return true;
+                // Fallback: If status is an interview-specific one and we are on Shortlisted tab
+                const interviewStatuses = ['Interview Scheduled', 'Interview Rescheduled', 'Interview Completed', 'New Round'];
+                if (interviewStatuses.includes(a.status) && activeTab === 'Shortlisted') return true;
+                return false;
+            });
+        }
+
         return [];
     };
 
     // Modal State
     const [showModal, setShowModal] = useState(false);
     const [showPreview, setShowPreview] = useState(false);
+    const [showCandidateModal, setShowCandidateModal] = useState(false);
 
     // File Upload State
     const fileInputRef = React.useRef(null);
@@ -88,6 +290,13 @@ export default function Applicants() {
     // Salary Assignment State
     const [showSalaryModal, setShowSalaryModal] = useState(false);
     const [showSalaryPreview, setShowSalaryPreview] = useState(false);
+
+    // Review Modal State
+    const [showReviewModal, setShowReviewModal] = useState(false);
+    const [selectedStatusForReview, setSelectedStatusForReview] = useState('');
+    const [isFinishingInterview, setIsFinishingInterview] = useState(false);
+    const [reviewRating, setReviewRating] = useState(0);
+    const [reviewFeedback, setReviewFeedback] = useState('');
 
     const [generating, setGenerating] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
@@ -159,23 +368,78 @@ export default function Applicants() {
         }
     };
 
-    const markInterviewCompleted = async (applicant) => {
-        if (!confirm("Mark interview as completed?")) return;
+    const markInterviewCompleted = (applicant) => {
+        setSelectedApplicant(applicant);
+        setIsFinishingInterview(true);
+        setSelectedStatusForReview(''); // User will pick the next stage
+        setReviewRating(0);
+        setReviewFeedback('');
+        setShowReviewModal(true);
+    };
+
+    const updateStatus = async (applicant, status, review = null) => {
+        // Only confirm if no review is being sent (direct status change)
+        if (!review && !confirm(`Update status to ${status}? This will trigger an email.`)) return;
+
         try {
-            await api.put(`/requirements/applicants/${applicant._id}/interview/complete`);
+            const payload = { status };
+            if (review) {
+                payload.rating = review.rating;
+                payload.feedback = review.feedback;
+                payload.stageName = activeTab;
+            }
+            await api.patch(`/requirements/applicants/${applicant._id}/status`, payload);
             loadApplicants();
+            return true;
         } catch (error) {
             alert("Failed: " + error.message);
+            return false;
         }
     };
 
-    const updateStatus = async (applicant, status) => {
-        if (!confirm(`Update status to ${status}? This will trigger an email.`)) return;
+    const openReviewPrompt = (applicant, status) => {
+        setSelectedApplicant(applicant);
+        setSelectedStatusForReview(status);
+        setReviewRating(0);
+        setReviewFeedback('');
+        setShowReviewModal(true);
+    };
+
+    const submitReviewAndStatus = async () => {
+        if (!selectedApplicant || !selectedStatusForReview) return;
+
+        setLoading(true);
         try {
-            await api.patch(`/requirements/applicants/${applicant._id}/status`, { status });
-            loadApplicants();
+            // 1. If finishing interview, mark it complete in DB first
+            if (isFinishingInterview) {
+                await api.put(`/requirements/applicants/${selectedApplicant._id}/interview/complete`);
+            }
+
+            // 2. Update status with review
+            const success = await updateStatus(selectedApplicant, selectedStatusForReview, {
+                rating: reviewRating,
+                feedback: reviewFeedback
+            });
+
+            if (success) {
+                const status = selectedStatusForReview; // Save before clear
+                const applicant = selectedApplicant;
+
+                setShowReviewModal(false);
+                setIsFinishingInterview(false);
+                setReviewRating(0);
+                setReviewFeedback('');
+                setSelectedStatusForReview('');
+
+                // Trigger scheduling if appropriate
+                if (status === 'Shortlisted' || status.includes('Interview')) {
+                    openScheduleModal(applicant);
+                }
+            }
         } catch (error) {
-            alert("Failed: " + error.message);
+            alert("Failed to complete action: " + error.message);
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -442,6 +706,31 @@ export default function Applicants() {
         }
     };
 
+    const getResumeUrl = (filePath) => {
+        if (!filePath) return null;
+        let cleanPath = filePath;
+        if (filePath.includes('/') || filePath.includes('\\')) {
+            cleanPath = filePath.split(/[/\\]/).pop();
+        }
+        return import.meta.env.VITE_API_URL
+            ? `${import.meta.env.VITE_API_URL}/uploads/${cleanPath}`
+            : `http://localhost:5000/uploads/${cleanPath}`;
+    };
+
+    const viewResume = (filePath) => {
+        const url = getResumeUrl(filePath);
+        if (url) window.open(url, '_blank');
+    };
+
+    const downloadResume = (filePath) => {
+        viewResume(filePath);
+    };
+
+    const openCandidateModal = (applicant) => {
+        setSelectedApplicant(applicant);
+        setShowCandidateModal(true);
+    };
+
     const openJoiningModal = (applicant) => {
         if (!applicant.offerLetterPath) {
             alert("Please generate an Offer Letter first.");
@@ -573,13 +862,30 @@ export default function Applicants() {
                     <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">Applicants</h1>
                     <p className="text-sm sm:text-base text-slate-500 mt-1">Manage candidates and generate letters.</p>
                 </div>
-                <button
-                    onClick={loadApplicants}
-                    className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition text-sm sm:text-base w-full sm:w-auto justify-center"
-                >
-                    <RefreshCw size={18} />
-                    Refresh List
-                </button>
+
+                <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+                    <div className="w-full sm:w-64">
+                        <select
+                            className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                            value={selectedReqId}
+                            onChange={(e) => handleRequirementChange(e.target.value)}
+                        >
+                            <option value="all">View All Applications</option>
+                            <optgroup label="Filter by Job">
+                                {requirements.map(req => (
+                                    <option key={req._id} value={req._id}>{req.jobTitle}</option>
+                                ))}
+                            </optgroup>
+                        </select>
+                    </div>
+                    <button
+                        onClick={refreshData}
+                        className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition text-sm sm:text-base justify-center"
+                    >
+                        <RefreshCw size={18} />
+                        Refresh
+                    </button>
+                </div>
             </div>
 
             <div className="bg-white rounded-xl border border-slate-200 shadow-xl shadow-slate-200/60 overflow-hidden">
@@ -595,64 +901,81 @@ export default function Applicants() {
                 ) : (
                     <div className="overflow-x-auto">
                         <div className="inline-block min-w-full align-middle">
-                            <div className="flex gap-4 mb-6 border-b border-slate-200">
-                                <button
-                                    onClick={() => setActiveTab('new')}
-                                    className={`pb-2 px-4 font-medium text-sm transition-colors relative ${activeTab === 'new'
-                                        ? 'text-blue-600 border-b-2 border-blue-600'
-                                        : 'text-slate-500 hover:text-slate-700'
-                                        }`}
-                                >
-                                    New Applications
-                                    <span className="ml-2 bg-slate-100 text-slate-600 py-0.5 px-2 rounded-full text-xs">
-                                        {applicants.filter(a => a.status === 'Applied').length}
-                                    </span>
-                                </button>
-                                <button
-                                    onClick={() => setActiveTab('interview')}
-                                    className={`pb-2 px-4 font-medium text-sm transition-colors relative ${activeTab === 'interview'
-                                        ? 'text-indigo-600 border-b-2 border-indigo-600'
-                                        : 'text-slate-500 hover:text-slate-700'
-                                        }`}
-                                >
-                                    Interviews
-                                    <span className="ml-2 bg-slate-100 text-slate-600 py-0.5 px-2 rounded-full text-xs">
-                                        {applicants.filter(a => ['Shortlisted', 'Interview Scheduled', 'Interview Rescheduled', 'Interview Completed'].includes(a.status)).length}
-                                    </span>
-                                </button>
-                                <button
-                                    onClick={() => setActiveTab('final')}
-                                    className={`pb-2 px-4 font-medium text-sm transition-colors relative ${activeTab === 'final'
-                                        ? 'text-emerald-600 border-b-2 border-emerald-600'
-                                        : 'text-slate-500 hover:text-slate-700'
-                                        }`}
-                                >
-                                    Finalized
-                                    <span className="ml-2 bg-slate-100 text-slate-600 py-0.5 px-2 rounded-full text-xs">
-                                        {applicants.filter(a => ['Selected', 'Rejected'].includes(a.status)).length}
-                                    </span>
-                                </button>
+                            {/* Dynamic Tabs */}
+                            <div className="flex gap-2 mb-0 border-b border-slate-200 overflow-x-auto px-4 pt-4">
+                                {workflowTabs.map(tab => {
+                                    // Count Logic
+                                    let count = 0;
+                                    if (selectedReqId === 'all') {
+                                        if (tab === 'new') count = applicants.filter(a => a.status === 'Applied').length;
+                                        else if (tab === 'interview') count = applicants.filter(a => ['Shortlisted', 'Interview Scheduled', 'Interview Rescheduled', 'Interview Completed'].includes(a.status)).length;
+                                        else if (tab === 'final') count = applicants.filter(a => ['Selected', 'Rejected'].includes(a.status)).length;
+                                    } else {
+                                        const sub = applicants.filter(a => (a.requirementId?._id === selectedReqId || a.requirementId === selectedReqId));
+                                        if (tab === 'Finalized') count = sub.filter(a => ['Selected', 'Rejected', 'Finalized'].includes(a.status)).length;
+                                        else count = sub.filter(a => a.status === tab).length;
+                                    }
+
+                                    const label = tab === 'new' ? 'New Applications' :
+                                        tab === 'interview' ? 'Interviews' :
+                                            tab === 'final' ? 'Finalized' : tab;
+
+                                    return (
+                                        <button
+                                            key={tab}
+                                            onClick={() => { setActiveTab(tab); setCurrentPage(1); }}
+                                            className={`pb-3 px-4 font-medium text-sm transition-colors relative whitespace-nowrap flex-shrink-0 border-b-2 ${activeTab === tab
+                                                ? 'text-blue-600 border-blue-600'
+                                                : 'text-slate-500 border-transparent hover:text-slate-700 hover:border-slate-300'
+                                                }`}
+                                        >
+                                            {label}
+                                            <span className={`ml-2 py-0.5 px-2 rounded-full text-xs ${activeTab === tab ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'}`}>
+                                                {count}
+                                            </span>
+                                        </button>
+                                    );
+
+                                })}
+
+                                {/* Edit Workflow Button (Only for specific job view) */}
+                                {selectedReqId !== 'all' && (
+                                    <button
+                                        onClick={openWorkflowEditor}
+                                        className="sticky right-0 ml-auto mb-1 flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-md transition border border-blue-200 shadow-sm z-10"
+                                        title="Update Hiring Steps"
+                                    >
+                                        <Settings size={14} />
+                                        <span>Update Hiring</span>
+                                    </button>
+                                )}
                             </div>
 
                             <table className="min-w-full divide-y divide-slate-100">
-                                <thead className="bg-slate-100/80 text-slate-600 font-bold sticky top-0 z-10 backdrop-blur-sm">
+                                <thead className="bg-slate-50/80 text-slate-600 font-bold sticky top-0 z-10 backdrop-blur-sm">
                                     <tr>
-                                        <th className="px-6 py-5 text-left text-xs font-bold text-slate-600 uppercase tracking-wider">Candidate</th>
-                                        <th className="px-6 py-5 text-left text-xs font-bold text-slate-600 uppercase tracking-wider hidden md:table-cell">Role</th>
-                                        <th className="px-6 py-5 text-left text-xs font-bold text-slate-600 uppercase tracking-wider">
-                                            {activeTab === 'interview' ? 'Interview Status' : 'Status'}
-                                        </th>
-                                        {activeTab === 'new' && (
-                                            <th className="px-6 py-5 text-left text-xs font-bold text-slate-600 uppercase tracking-wider">Actions</th>
-                                        )}
-                                        {activeTab === 'interview' && (
-                                            <th className="px-6 py-5 text-left text-xs font-bold text-slate-600 uppercase tracking-wider">Schedule Detail</th>
-                                        )}
-                                        {activeTab === 'final' && (
+                                        <th className="px-6 py-4 text-left text-xs font-bold text-slate-600 uppercase tracking-wider">Candidate</th>
+                                        <th className="px-6 py-4 text-left text-xs font-bold text-slate-600 uppercase tracking-wider">Resume</th>
+                                        <th className="px-6 py-4 text-left text-xs font-bold text-slate-600 uppercase tracking-wider hidden md:table-cell">Role</th>
+                                        <th className="px-6 py-4 text-left text-xs font-bold text-slate-600 uppercase tracking-wider">Status</th>
+
+                                        {/* Dynamic Columns - Only show for specific job */}
+                                        {selectedReqId !== 'all' && (
                                             <>
-                                                <th className="px-6 py-5 text-left text-xs font-bold text-slate-600 uppercase tracking-wider">Offer Letter</th>
-                                                <th className="px-6 py-5 text-left text-xs font-bold text-slate-600 uppercase tracking-wider">Salary</th>
-                                                <th className="px-6 py-5 text-left text-xs font-bold text-slate-600 uppercase tracking-wider">Joining Letter</th>
+                                                {/* Custom Workflow Columns */}
+                                                {activeTab !== 'Finalized' && <th className="px-6 py-4 text-left text-xs font-bold text-slate-600 uppercase tracking-wider">Process</th>}
+                                                {activeTab === 'Finalized' && (
+                                                    <>
+                                                        <th className="px-6 py-4 text-left text-xs font-bold text-slate-600 uppercase tracking-wider">Outcome</th>
+                                                        {applicants.some(a => a.status === 'Selected') && (
+                                                            <>
+                                                                <th className="px-6 py-4 text-left text-xs font-bold text-slate-600 uppercase tracking-wider">Offer</th>
+                                                                <th className="px-6 py-4 text-left text-xs font-bold text-slate-600 uppercase tracking-wider">Salary</th>
+                                                                <th className="px-6 py-4 text-left text-xs font-bold text-slate-600 uppercase tracking-wider">Joining</th>
+                                                            </>
+                                                        )}
+                                                    </>
+                                                )}
                                             </>
                                         )}
                                     </tr>
@@ -660,209 +983,188 @@ export default function Applicants() {
                                 <tbody className="divide-y divide-slate-200 bg-white">
                                     {getFilteredApplicants().slice((currentPage - 1) * pageSize, currentPage * pageSize).map(app => (
                                         <tr key={app._id} className="hover:bg-slate-50 transition-colors">
-                                            {/* CANDIDATE Column */}
-                                            <td className="px-4 sm:px-6 py-4">
+                                            {/* Common Columns */}
+                                            <td className="px-6 py-4">
                                                 <div className="text-sm font-medium text-slate-900">{app.name}</div>
-                                                <div className="text-xs text-slate-500 mt-1">{app.email}</div>
+                                                <div className="text-xs text-slate-500">{app.email}</div>
                                                 <div className="text-xs text-slate-500">{app.mobile || 'N/A'}</div>
-                                                <div className="text-xs text-slate-600 mt-1 md:hidden">
-                                                    <span className="font-medium">{app.requirementId?.jobTitle || 'N/A'}</span> • {app.experience || '0 Years Exp'}
-                                                </div>
                                             </td>
-                                            {/* ROLE Column */}
-                                            <td className="px-4 sm:px-6 py-4 hidden md:table-cell">
-                                                <div className="text-sm font-medium text-slate-900">{app.requirementId?.jobTitle || 'N/A'}</div>
-                                                <div className="text-xs text-slate-500 mt-1">{app.experience || '0 Years Exp'}</div>
+                                            <td className="px-6 py-4">
+                                                {app.resume ? (
+                                                    <div className="flex gap-2">
+                                                        <button
+                                                            onClick={() => openCandidateModal(app)}
+                                                            className="text-slate-500 hover:text-blue-600 p-1 rounded hover:bg-blue-50 transition"
+                                                            title="View Application & Resume"
+                                                        >
+                                                            <Eye size={16} />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => downloadResume(app.resume)}
+                                                            className="text-slate-500 hover:text-green-600 p-1 rounded hover:bg-green-50 transition"
+                                                            title="Download Resume"
+                                                        >
+                                                            <Download size={16} />
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-xs text-slate-400 italic">No Resume</span>
+                                                )}
                                             </td>
-                                            {/* STATUS Column */}
-                                            <td className="px-4 sm:px-6 py-4">
-                                                <span className={`inline-flex px-2 sm:px-3 py-1 text-xs font-semibold rounded-full ${getStatusColor(app.status)}`}>
-                                                    {app.status || 'Applied'}
+                                            <td className="px-6 py-4 hidden md:table-cell">
+                                                <div className="text-sm font-medium text-slate-900 truncate max-w-[150px]">{app.requirementId?.jobTitle}</div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <span className={`inline-flex px-2.5 py-0.5 text-xs font-semibold rounded-full ${getStatusColor(app.status)}`}>
+                                                    {app.status}
                                                 </span>
                                             </td>
 
-                                            {/* TAB SPECIFIC COLUMNS */}
+                                            {/* Logic for 'All' View - No Actions visible */}
+                                            {selectedReqId === 'all' && null}
 
-                                            {/* 1. NEW APPLICATIONS TAB - Actions */}
-                                            {activeTab === 'new' && (
-                                                <td className="px-4 sm:px-6 py-4">
-                                                    <div className="flex gap-2">
-                                                        <button
-                                                            onClick={() => {
-                                                                if (confirm("Shortlist this candidate for interview?")) {
-                                                                    updateStatus(app, 'Shortlisted');
-                                                                    setActiveTab('interview'); // Move to next tab
-                                                                }
-                                                            }}
-                                                            className="px-3 py-1 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded transition"
-                                                        >
-                                                            Shortlist
-                                                        </button>
-                                                        <button
-                                                            onClick={() => updateStatus(app, 'Rejected')}
-                                                            className="px-3 py-1 text-xs font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded transition border border-red-200"
-                                                        >
-                                                            Reject
-                                                        </button>
-                                                    </div>
-                                                </td>
-                                            )}
+                                            {/* Logic for 'Custom Workflow' View */}
+                                            {selectedReqId !== 'all' && (
+                                                <>
+                                                    {activeTab !== 'Finalized' && (
+                                                        <td className="px-6 py-4">
+                                                            {/* Show Reviews / Feedback History */}
+                                                            {app.reviews && app.reviews.length > 0 && (
+                                                                <div className="mb-3 space-y-2">
+                                                                    {app.reviews.map((rev, idx) => (
+                                                                        <div key={idx} className="p-2 bg-slate-50 border border-slate-100 rounded text-[10px] relative group">
+                                                                            <div className="flex justify-between items-start mb-1">
+                                                                                <span className="font-bold text-slate-700 uppercase">{rev.stage}</span>
+                                                                                <div className="flex text-amber-500">
+                                                                                    {[...Array(5)].map((_, i) => (
+                                                                                        <span key={i} className={i < rev.rating ? 'fill-current' : 'text-slate-200'}>★</span>
+                                                                                    ))}
+                                                                                </div>
+                                                                            </div>
+                                                                            <p className="text-slate-600 italic line-clamp-2" title={rev.feedback}>"{rev.feedback}"</p>
+                                                                            <div className="mt-1 text-slate-400 text-[9px] flex justify-between">
+                                                                                <span>By {rev.interviewerName}</span>
+                                                                                <span>{dayjs(rev.createdAt).format('DD/MM')}</span>
+                                                                            </div>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            )}
 
-                                            {/* 2. INTERVIEW TAB - Schedule Details & Actions */}
-                                            {activeTab === 'interview' && (
-                                                <td className="px-4 sm:px-6 py-4">
-                                                    {app.interview && app.interview.date ? (
-                                                        <div className="text-xs text-slate-700 mb-2">
-                                                            <div className="font-semibold">{dayjs(app.interview.date).format('DD MMM YYYY')} @ {app.interview.time}</div>
-                                                            <div>{app.interview.mode} - {app.interview.interviewerName}</div>
-                                                        </div>
-                                                    ) : (
-                                                        <div className="text-xs text-slate-400 italic mb-2">No schedule yet</div>
+                                                            {/* Show Scheduled Interview Details if available */}
+                                                            {app.interview?.date && (
+                                                                <div className={`mb-2 p-2 border rounded-md ${app.interview.completed ? 'bg-emerald-50 border-emerald-100' : 'bg-indigo-50 border-indigo-100'}`}>
+                                                                    <div className="text-xs font-semibold flex items-center justify-between">
+                                                                        <div className={`${app.interview.completed ? 'text-emerald-900' : 'text-indigo-900'} flex items-center gap-1`}>
+                                                                            <span>📅 {dayjs(app.interview.date).format('DD MMM')}</span>
+                                                                            <span>⏰ {app.interview.time}</span>
+                                                                        </div>
+                                                                        {app.interview.completed && (
+                                                                            <span className="text-[10px] bg-emerald-600 text-white px-1.5 py-0.5 rounded-full font-bold">DONE</span>
+                                                                        )}
+                                                                    </div>
+                                                                    <div className={`text-[10px] mt-1 ${app.interview.completed ? 'text-emerald-700' : 'text-indigo-700'}`}>
+                                                                        Mode: {app.interview.mode}
+                                                                    </div>
+
+                                                                    {!app.interview.completed && (
+                                                                        <div className="flex gap-2 mt-1">
+                                                                            <button
+                                                                                onClick={() => openScheduleModal(app, true)}
+                                                                                className="text-[10px] text-indigo-600 underline hover:text-indigo-800"
+                                                                            >
+                                                                                Reschedule
+                                                                            </button>
+                                                                            <button
+                                                                                onClick={() => markInterviewCompleted(app)}
+                                                                                className="text-[10px] text-emerald-600 underline hover:text-emerald-800"
+                                                                            >
+                                                                                Mark Complete
+                                                                            </button>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            )}
+
+                                                            <div className="flex gap-2 items-center">
+                                                                <Select
+                                                                    placeholder="Change Status"
+                                                                    style={{ width: 160 }}
+                                                                    size="small"
+                                                                    onChange={(val) => {
+                                                                        if (val === 'custom_add') {
+                                                                            setCandidateForCustomStage(app);
+                                                                            setIsCustomStageModalVisible(true);
+                                                                        } else {
+                                                                            openReviewPrompt(app, val);
+                                                                        }
+                                                                    }}
+                                                                    dropdownMatchSelectWidth={false}
+                                                                    value={null}
+                                                                >
+                                                                    <Select.Option disabled value="">Move to...</Select.Option>
+                                                                    {workflowTabs
+                                                                        .filter(t => t !== 'Finalized' && t !== app.status)
+                                                                        .map(stage => (
+                                                                            <Select.Option key={stage} value={stage}>
+                                                                                Move to {stage}
+                                                                            </Select.Option>
+                                                                        ))
+                                                                    }
+                                                                    {/* Custom Stage Option */}
+                                                                    <Select.Option value="custom_add" className="text-blue-600 font-bold border-t border-gray-100">+ Add Custom Stage</Select.Option>
+
+                                                                    <Select.Option value="Selected" className="text-green-600 font-medium border-t border-gray-100">Select Candidate</Select.Option>
+                                                                    <Select.Option value="Rejected" className="text-red-600 font-medium">Reject Candidate</Select.Option>
+                                                                </Select>
+                                                            </div>
+                                                        </td>
                                                     )}
 
-                                                    <div className="flex flex-wrap gap-2">
-                                                        {app.status === 'Shortlisted' && (
-                                                            <button onClick={() => openScheduleModal(app, false)} className="text-[10px] bg-indigo-600 text-white px-2 py-1 rounded">Schedule</button>
-                                                        )}
-                                                        {['Interview Scheduled', 'Interview Rescheduled'].includes(app.status) && (
-                                                            <>
-                                                                <button onClick={() => openScheduleModal(app, true)} className="text-[10px] bg-orange-500 text-white px-2 py-1 rounded">Reschedule</button>
-                                                                <button onClick={() => markInterviewCompleted(app)} className="text-[10px] bg-emerald-500 text-white px-2 py-1 rounded">Complete</button>
-                                                            </>
-                                                        )}
-                                                        {app.status === 'Interview Completed' && (
-                                                            <>
-                                                                <button onClick={() => { updateStatus(app, 'Selected'); setActiveTab('final'); }} className="text-[10px] bg-green-600 text-white px-2 py-1 rounded">Select</button>
-                                                                <button onClick={() => { updateStatus(app, 'Rejected'); setActiveTab('final'); }} className="text-[10px] bg-red-600 text-white px-2 py-1 rounded">Reject</button>
-                                                            </>
-                                                        )}
-                                                    </div>
-                                                </td>
-                                            )}
-
-                                            {/* 3. FINALIZED TAB - Offer/Salary/Joining */}
-                                            {activeTab === 'final' && (
-                                                <>
-                                                    {/* OFFER LETTER Column */}
-                                                    <td className="px-4 sm:px-6 py-4">
-                                                        {app.offerLetterPath ? (
-                                                            <div className="flex items-center gap-1 sm:gap-2">
-                                                                <button
-                                                                    onClick={() => viewOfferLetter(app.offerLetterPath)}
-                                                                    className="p-1.5 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded transition"
-                                                                    title="View Offer Letter"
-                                                                >
-                                                                    <Eye size={16} className="sm:w-[18px] sm:h-[18px]" />
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => downloadOffer(app.offerLetterPath)}
-                                                                    className="p-1.5 text-slate-600 hover:text-green-600 hover:bg-green-50 rounded transition"
-                                                                    title="Download Offer Letter"
-                                                                >
-                                                                    <Download size={16} className="sm:w-[18px] sm:h-[18px]" />
-                                                                </button>
-                                                            </div>
-                                                        ) : (
-                                                            <div className="flex flex-col gap-1">
-                                                                {app.status === 'Selected' ? (
-                                                                    <button
-                                                                        onClick={() => openOfferModal(app)}
-                                                                        className="px-2 sm:px-3 py-1 sm:py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition whitespace-nowrap"
-                                                                    >
-                                                                        Generate Offer
-                                                                    </button>
-                                                                ) : (
-                                                                    <span className="text-xs text-red-400">Rejected</span>
-                                                                )}
-                                                            </div>
-                                                        )}
-                                                    </td>
-                                                    {/* SALARY Column */}
-                                                    <td className="px-6 py-4">
-                                                        {/* If Excel is uploaded, show info */}
-                                                        {app.salaryExcelData && (
-                                                            <div className="mb-2 flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 px-2 py-1 rounded border border-emerald-200 w-fit">
-                                                                <FileText size={12} />
-                                                                <span className="font-medium truncate max-w-[120px]" title={app.salaryExcelFileName || "Excel Data Uploaded"}>
-                                                                    {app.salaryExcelFileName || "Excel Uploaded"}
-                                                                </span>
-                                                                <CheckCircle size={10} className="text-emerald-500" />
-                                                            </div>
-                                                        )}
-
-                                                        {app.salarySnapshot && app.salarySnapshot.ctc?.yearly > 0 ? (
-                                                            <div className="flex items-center justify-start gap-2">
-                                                                <button
-                                                                    onClick={() => openSalaryModal(app)}
-                                                                    className="p-2 text-blue-600 bg-blue-50 hover:bg-blue-100 hover:text-blue-700 rounded-full transition-all shadow-sm border border-blue-100 group"
-                                                                    title="Edit Salary Structure"
-                                                                >
-                                                                    <Edit2 size={16} className="group-hover:scale-110 transition-transform" />
-                                                                </button>
-                                                                <div className="flex flex-col">
-                                                                    <span className="text-xs font-medium text-slate-500 flex items-center gap-1">
-                                                                        <IndianRupee size={10} />
-                                                                        {app.salarySnapshot.ctc?.yearly?.toLocaleString('en-IN') || '0'}
-                                                                    </span>
-                                                                    <span className="text-[10px] text-slate-400">CTC / Year</span>
-                                                                </div>
-                                                            </div>
-                                                        ) : (
-                                                            <div className="flex flex-col gap-2">
-                                                                {app.status === 'Selected' && (
-                                                                    <>
-                                                                        <button
-                                                                            onClick={() => openSalaryModal(app)}
-                                                                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-md transition-colors shadow-sm w-fit"
-                                                                        >
-                                                                            <DollarSign size={14} />
-                                                                            Assign CTC
-                                                                        </button>
-                                                                        <button
-                                                                            onClick={() => triggerFileUpload(app)}
-                                                                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-md transition-colors w-fit"
-                                                                            disabled={uploading}
-                                                                        >
-                                                                            <Upload size={14} />
-                                                                            {uploading && selectedApplicant?._id === app._id ? 'Uploading...' : 'Upload Excel'}
-                                                                        </button>
-                                                                    </>
-                                                                )}
-                                                            </div>
-                                                        )}
-                                                    </td>
-
-                                                    {/* JOINING LETTER Column */}
-                                                    <td className="px-6 py-4">
-                                                        {/* Only show if offer letter is generated */}
-                                                        {!app.offerLetterPath ? (
-                                                            <span className="text-xs text-slate-400 italic">Generate Offer First</span>
-                                                        ) : app.joiningLetterPath ? (
-                                                            <div className="flex items-center gap-2">
-                                                                <button
-                                                                    onClick={() => viewJoiningLetter(app._id)}
-                                                                    className="p-1.5 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded transition"
-                                                                    title="View Joining Letter"
-                                                                >
-                                                                    <Eye size={16} />
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => downloadJoiningLetter(app._id)}
-                                                                    className="p-1.5 text-slate-600 hover:text-green-600 hover:bg-green-50 rounded transition"
-                                                                    title="Download Joining Letter"
-                                                                >
-                                                                    <Download size={16} />
-                                                                </button>
-                                                            </div>
-                                                        ) : (
-                                                            <button
-                                                                onClick={() => openJoiningModal(app)}
-                                                                className="px-3 py-1.5 text-xs font-medium text-purple-600 bg-purple-50 hover:bg-purple-100 rounded-lg transition whitespace-nowrap border border-purple-200"
-                                                            >
-                                                                Generate
-                                                            </button>
-                                                        )}
-                                                    </td>
+                                                    {activeTab === 'Finalized' && (
+                                                        <>
+                                                            <td className="px-6 py-4">
+                                                                {app.status === 'Selected'
+                                                                    ? <span className="text-xs font-bold text-green-600">Selected</span>
+                                                                    : <span className="text-xs font-bold text-red-600">Rejected</span>}
+                                                            </td>
+                                                            {applicants.some(a => a.status === 'Selected') && (
+                                                                <>
+                                                                    {/* Reuse Offer/Salary/Joining display logic here simplified */}
+                                                                    <td className="px-6 py-4">
+                                                                        {app.status === 'Selected' ? (
+                                                                            app.offerLetterPath ? (
+                                                                                <div className="flex gap-2">
+                                                                                    <button onClick={() => viewOfferLetter(app.offerLetterPath)} className="text-slate-500 hover:text-blue-600"><Eye size={16} /></button>
+                                                                                    <button onClick={() => downloadOffer(app.offerLetterPath)} className="text-slate-500 hover:text-green-600"><Download size={16} /></button>
+                                                                                </div>
+                                                                            ) : <button onClick={() => openOfferModal(app)} className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded border border-blue-200">Generate</button>
+                                                                        ) : <span className="text-xs text-slate-300">-</span>}
+                                                                    </td>
+                                                                    <td className="px-6 py-4">
+                                                                        {app.status === 'Selected' ? (
+                                                                            app.salarySnapshot?.ctc?.yearly > 0 ? (
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <button onClick={() => openSalaryModal(app)} className="text-emerald-600 hover:bg-emerald-50 p-1 rounded"><Edit2 size={14} /></button>
+                                                                                    <span className="text-xs font-bold text-slate-700">₹{(app.salarySnapshot.ctc.yearly / 100000).toFixed(1)}L</span>
+                                                                                </div>
+                                                                            ) : <button onClick={() => openSalaryModal(app)} className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded">Assign</button>
+                                                                        ) : <span className="text-xs text-slate-300">-</span>}
+                                                                    </td>
+                                                                    <td className="px-6 py-4">
+                                                                        {app.status === 'Selected' && app.offerLetterPath ? (
+                                                                            app.joiningLetterPath ? (
+                                                                                <div className="flex gap-2">
+                                                                                    <button onClick={() => viewJoiningLetter(app._id)} className="text-slate-500 hover:text-blue-600"><Eye size={16} /></button>
+                                                                                    <button onClick={() => downloadJoiningLetter(app._id)} className="text-slate-500 hover:text-green-600"><Download size={16} /></button>
+                                                                                </div>
+                                                                            ) : <button onClick={() => openJoiningModal(app)} className="text-xs bg-purple-50 text-purple-600 px-2 py-1 rounded border border-purple-200">Generate</button>
+                                                                        ) : <span className="text-xs text-slate-300">-</span>}
+                                                                    </td>
+                                                                </>
+                                                            )}
+                                                        </>
+                                                    )}
                                                 </>
                                             )}
                                         </tr>
@@ -874,7 +1176,7 @@ export default function Applicants() {
                             <Pagination
                                 current={currentPage}
                                 pageSize={pageSize}
-                                total={applicants.length}
+                                total={getFilteredApplicants().length}
                                 onChange={(page) => setCurrentPage(page)}
                                 showSizeChanger={false}
                                 responsive={true}
@@ -1309,6 +1611,394 @@ export default function Applicants() {
                     </div>
                 </div>
             )}
+
+            {/* Custom Stage Modal */}
+            {isCustomStageModalVisible && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-lg shadow-xl w-full max-w-sm p-6">
+                        <h2 className="text-lg font-bold text-slate-800 mb-4">Add Custom Stage</h2>
+                        <p className="text-sm text-slate-600 mb-4">Enter the name for the new ad-hoc stage. This will be added for <b>{candidateForCustomStage?.name}</b>.</p>
+
+                        <input
+                            type="text"
+                            value={customStageName}
+                            onChange={(e) => setCustomStageName(e.target.value)}
+                            placeholder="e.g. Manager Review 2"
+                            className="w-full p-2 border border-slate-300 rounded mb-4"
+                            autoFocus
+                        />
+
+                        <div className="flex gap-2 justify-end">
+                            <button onClick={() => setIsCustomStageModalVisible(false)} className="px-3 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded">Cancel</button>
+                            <button onClick={handleAddCustomStage} className="px-3 py-2 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 font-medium">Add & Move</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Workflow Edit Modal */}
+            {
+                showWorkflowEditModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                        <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+                            <div className="flex justify-between items-center mb-6">
+                                <h2 className="text-xl font-bold text-slate-800">Edit Hiring Workflow</h2>
+                                <button onClick={() => setShowWorkflowEditModal(false)} className="text-slate-400 hover:text-slate-600">
+                                    <X size={20} />
+                                </button>
+                            </div>
+
+                            <p className="text-sm text-slate-500 mb-4 bg-blue-50 p-3 rounded-lg border border-blue-100">
+                                Customize the hiring process for <b>{selectedRequirement?.jobTitle}</b>.
+                                Adding steps here updates the job for all candidates.
+                            </p>
+
+                            <div className="space-y-3 mb-6 max-h-[300px] overflow-y-auto pr-2">
+                                {editingWorkflow.map((stage, index) => (
+                                    <div
+                                        key={index}
+                                        className={`flex items-center gap-2 p-2 bg-slate-50 rounded border border-slate-200 group ${stage === 'Applied' || stage === 'Finalized' ? 'opacity-80' : 'cursor-move hover:border-blue-300'}`}
+                                        draggable={stage !== 'Applied' && stage !== 'Finalized'}
+                                        onDragStart={(e) => {
+                                            dragItem.current = index;
+                                            e.target.classList.add('opacity-50');
+                                        }}
+                                        onDragEnter={(e) => {
+                                            dragOverItem.current = index;
+                                        }}
+                                        onDragEnd={(e) => {
+                                            e.target.classList.remove('opacity-50');
+                                            handleSort();
+                                        }}
+                                        onDragOver={(e) => e.preventDefault()}
+                                    >
+                                        {/* Grip Handle for Draggable Items */}
+                                        {stage !== 'Applied' && stage !== 'Finalized' ? (
+                                            <div className="text-slate-400 cursor-grab active:cursor-grabbing">
+                                                <GripVertical size={16} />
+                                            </div>
+                                        ) : (
+                                            <div className="w-4"></div> // Spacer
+                                        )}
+
+                                        <div className="flex-1 text-sm font-medium text-slate-700">
+                                            {index + 1}. {stage}
+                                        </div>
+                                        {/* Prevent removing critical stages if needed, or allow full flexibility */}
+                                        {stage !== 'Applied' && stage !== 'Finalized' && (
+                                            <button
+                                                onClick={() => handleStageRemove(index)}
+                                                className="text-slate-400 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="flex gap-2 mb-6">
+                                <input
+                                    type="text"
+                                    value={newStageName}
+                                    onChange={(e) => setNewStageName(e.target.value)}
+                                    placeholder="New Stage Name (e.g. Logic Test)"
+                                    className="flex-1 p-2 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                    onKeyDown={(e) => e.key === 'Enter' && handleStageAdd()}
+                                />
+                                <button
+                                    onClick={handleStageAdd}
+                                    className="bg-blue-100 text-blue-600 p-2 rounded hover:bg-blue-200 transition"
+                                >
+                                    <Plus size={20} />
+                                </button>
+                            </div>
+
+                            <div className="flex gap-3 justify-end pt-4 border-t border-slate-100">
+                                <button
+                                    onClick={() => setShowWorkflowEditModal(false)}
+                                    className="px-4 py-2 text-slate-600 hover:bg-slate-50 rounded-lg text-sm font-medium"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={saveWorkflowChanges}
+                                    disabled={loading}
+                                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-md text-sm font-medium disabled:opacity-50"
+                                >
+                                    {loading ? 'Saving...' : 'Save Changes'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            {/* End of Workflow Edit Modal */}
+            {/* Candidate Details & Resume Modal */}
+            {showCandidateModal && selectedApplicant && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center overflow-y-auto p-4 sm:p-6">
+                    <div className="bg-white w-full max-w-7xl h-[90vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                        {/* Header */}
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-slate-50">
+                            <div>
+                                <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                                    {selectedApplicant.name}
+                                    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${getStatusColor(selectedApplicant.status)}`}>
+                                        {selectedApplicant.status}
+                                    </span>
+                                </h2>
+                                <p className="text-sm text-slate-500">Applied for <span className="font-medium text-slate-700">{selectedApplicant.requirementId?.jobTitle}</span></p>
+                            </div>
+                            <div className="flex gap-3">
+                                <a
+                                    href={getResumeUrl(selectedApplicant.resume)}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 font-medium text-sm flex items-center gap-2"
+                                >
+                                    <Download size={16} /> Download Resume
+                                </a>
+                                <button
+                                    onClick={() => setShowCandidateModal(false)}
+                                    className="p-2 hover:bg-slate-200 rounded-full transition text-slate-500"
+                                >
+                                    <X size={24} />
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Content */}
+                        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+                            {/* Sidebar: Candidate Details */}
+                            <div className="w-full lg:w-1/3 bg-white border-r border-slate-200 overflow-y-auto p-6 space-y-6">
+                                <section>
+                                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Personal Information</h3>
+                                    <div className="space-y-4">
+                                        <div className="flex items-start gap-3">
+                                            <div className="mt-0.5 text-slate-400"><FileText size={16} /></div>
+                                            <div>
+                                                <p className="text-xs text-slate-500">Father's Name</p>
+                                                <p className="text-sm font-medium text-slate-800">{selectedApplicant.fatherName || '-'}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-start gap-3">
+                                            <div className="mt-0.5 text-slate-400">@</div>
+                                            <div>
+                                                <p className="text-xs text-slate-500">Email Address</p>
+                                                <p className="text-sm font-medium text-slate-800 break-all">{selectedApplicant.email}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-start gap-3">
+                                            <div className="mt-0.5 text-slate-400">#</div>
+                                            <div>
+                                                <p className="text-xs text-slate-500">Mobile Number</p>
+                                                <p className="text-sm font-medium text-slate-800">{selectedApplicant.mobile}</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-start gap-3">
+                                            <div className="mt-0.5 text-slate-400">📅</div>
+                                            <div>
+                                                <p className="text-xs text-slate-500">Date of Birth</p>
+                                                <p className="text-sm font-medium text-slate-800">
+                                                    {selectedApplicant.dob ? dayjs(selectedApplicant.dob).format('DD MMM YYYY') : '-'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-start gap-3">
+                                            <div className="mt-0.5 text-slate-400">📍</div>
+                                            <div>
+                                                <p className="text-xs text-slate-500">Address</p>
+                                                <p className="text-sm text-slate-700 leading-relaxed">{selectedApplicant.address || '-'}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </section>
+
+                                <div className="border-t border-slate-100 my-2"></div>
+
+                                <section>
+                                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Professional Details</h3>
+                                    <div className="space-y-4">
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <p className="text-xs text-slate-500">Experience</p>
+                                                <p className="text-sm font-medium text-slate-800">{selectedApplicant.experience || '0'} Years</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-slate-500">Notice Period</p>
+                                                <p className="text-sm font-medium text-slate-800">{selectedApplicant.noticePeriod ? 'Yes' : 'No'}</p>
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <p className="text-xs text-slate-500">Current Company</p>
+                                            <p className="text-sm font-medium text-slate-800">{selectedApplicant.currentCompany || '-'}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-slate-500">Designation</p>
+                                            <p className="text-sm font-medium text-slate-800">{selectedApplicant.currentDesignation || '-'}</p>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <p className="text-xs text-slate-500">Current CTC</p>
+                                                <p className="text-sm font-medium text-slate-800">{selectedApplicant.currentCTC || '-'}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-slate-500">Expected CTC</p>
+                                                <p className="text-sm font-medium text-emerald-600">{selectedApplicant.expectedCTC || '-'}</p>
+                                            </div>
+                                        </div>
+
+                                        {selectedApplicant.linkedin && (
+                                            <div>
+                                                <p className="text-xs text-slate-500 mb-1">LinkedIn Profile</p>
+                                                <a href={selectedApplicant.linkedin} target="_blank" rel="noreferrer" className="text-sm text-blue-600 hover:underline truncate block">
+                                                    {selectedApplicant.linkedin}
+                                                </a>
+                                            </div>
+                                        )}
+                                    </div>
+                                </section>
+
+                                {selectedApplicant.intro && (
+                                    <>
+                                        <div className="border-t border-slate-100 my-2"></div>
+                                        <section>
+                                            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Introduction / Notes</h3>
+                                            <p className="text-sm text-slate-600 italic leading-relaxed bg-slate-50 p-3 rounded">
+                                                "{selectedApplicant.intro}"
+                                            </p>
+                                        </section>
+                                    </>
+                                )}
+                            </div>
+
+                            {/* Main Area: Resume Preview */}
+                            <div className="flex-1 bg-slate-100 flex items-center justify-center p-4">
+                                {selectedApplicant.resume ? (
+                                    selectedApplicant.resume.toLowerCase().endsWith('.pdf') ? (
+                                        <iframe
+                                            src={getResumeUrl(selectedApplicant.resume)}
+                                            className="w-full h-full rounded-lg shadow-input bg-white"
+                                            title="Resume Preview"
+                                        />
+                                    ) : (
+                                        <div className="text-center p-8 bg-white rounded-xl shadow-sm max-w-md">
+                                            <FileText size={48} className="mx-auto text-slate-300 mb-4" />
+                                            <p className="text-lg font-medium text-slate-800 mb-2">Preview not available</p>
+                                            <p className="text-slate-500 mb-6">This file type cannot be previewed directly in the browser.</p>
+                                            <a
+                                                href={getResumeUrl(selectedApplicant.resume)}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium"
+                                            >
+                                                <Download size={18} /> Download File
+                                            </a>
+                                        </div>
+                                    )
+                                ) : (
+                                    <div className="text-center text-slate-400">
+                                        <p>No resume uploaded</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {/* Review & Feedback Modal */}
+            {showReviewModal && selectedApplicant && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                        <div className="p-6">
+                            <h2 className="text-xl font-bold text-slate-800 mb-2">
+                                {isFinishingInterview ? 'Interview Completed: Evaluation' : 'Evaluate Candidate'}
+                            </h2>
+                            <p className="text-sm text-slate-500 mb-6">
+                                {isFinishingInterview
+                                    ? `Rate ${selectedApplicant.name}'s performance and decide the next step.`
+                                    : `You are moving ${selectedApplicant.name} to ${selectedStatusForReview}.`
+                                }
+                            </p>
+
+                            <div className="space-y-6">
+                                {/* Next Stage Picker (Only when finishing interview) */}
+                                {isFinishingInterview && (
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 text-blue-600">Decision: Move To</label>
+                                        <Select
+                                            className="w-full h-10"
+                                            placeholder="Select Next Stage / Result"
+                                            value={selectedStatusForReview || null}
+                                            onChange={(val) => setSelectedStatusForReview(val)}
+                                        >
+                                            <Select.OptGroup label="Hiring Pipeline">
+                                                {workflowTabs.filter(t => !['Applied', 'Finalized'].includes(t)).map(tab => (
+                                                    <Select.Option key={tab} value={tab}>{tab}</Select.Option>
+                                                ))}
+                                            </Select.OptGroup>
+                                            <Select.OptGroup label="Final Result">
+                                                <Select.Option value="Selected">Selected / Selected</Select.Option>
+                                                <Select.Option value="Rejected">Rejected</Select.Option>
+                                                <Select.Option value="Finalized">Finalized</Select.Option>
+                                            </Select.OptGroup>
+                                        </Select>
+                                    </div>
+                                )}
+                                {/* Star Rating */}
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Rating (Star)</label>
+                                    <div className="flex gap-2">
+                                        {[1, 2, 3, 4, 5].map((star) => (
+                                            <button
+                                                key={star}
+                                                onClick={() => setReviewRating(star)}
+                                                className={`p-1 transition-all ${reviewRating >= star ? 'text-amber-400 scale-110' : 'text-slate-200 hover:text-amber-200'}`}
+                                            >
+                                                <Star size={32} fill={reviewRating >= star ? 'currentColor' : 'none'} />
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Feedback Text */}
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Feedback / Call Notes</label>
+                                    <textarea
+                                        value={reviewFeedback}
+                                        onChange={(e) => setReviewFeedback(e.target.value)}
+                                        placeholder="Add your interview performance, reasons for selection, or call notes..."
+                                        className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all outline-none"
+                                        rows="4"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex gap-3 justify-end mt-8">
+                                <button
+                                    onClick={() => {
+                                        setShowReviewModal(false);
+                                        setIsFinishingInterview(false);
+                                    }}
+                                    className="px-4 py-2 text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-50 rounded-lg transition"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={submitReviewAndStatus}
+                                    disabled={loading || reviewRating === 0 || (isFinishingInterview && !selectedStatusForReview)}
+                                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-bold shadow-lg shadow-blue-200 transition-all transform active:scale-95 disabled:opacity-50 disabled:grayscale"
+                                >
+                                    {isFinishingInterview ? 'Complete & Move' : `Submit & Move to ${selectedStatusForReview}`}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
+
+
