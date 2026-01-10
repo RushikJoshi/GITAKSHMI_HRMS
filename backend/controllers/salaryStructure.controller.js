@@ -1,4 +1,4 @@
-const { calculateSalaryBreakup } = require('../services/salaryBreakupCalculator');
+const { calculateSalaryBreakup, suggestSalaryBreakup } = require('../services/salaryBreakupCalculator');
 
 // ✅ GLOBAL SalaryStructure model (single collection)
 const SalaryStructure = require('../models/SalaryStructure');
@@ -16,6 +16,27 @@ function getModels(req) {
         BenefitComponent: db.model("BenefitComponent")
     };
 }
+
+/**
+ * @route POST /api/salary-structure/suggest
+ * @desc Suggest salary structure based on CTC
+ */
+exports.suggestSalaryStructure = async (req, res) => {
+    try {
+        const { enteredCTC } = req.body;
+        if (!enteredCTC) return res.status(400).json({ message: "Entered CTC is required" });
+
+        const suggestion = suggestSalaryBreakup({ enteredCTC: Number(enteredCTC) });
+
+        res.json({
+            success: true,
+            data: suggestion
+        });
+    } catch (error) {
+        console.error("Suggest Error:", error);
+        res.status(500).json({ message: error.message });
+    }
+};
 
 /**
  * @route POST /api/salary-structure/create
@@ -172,3 +193,4 @@ exports.getSalaryStructure = async (req, res) => {
         return res.status(500).json({ message: err.message });
     }
 };
+    
