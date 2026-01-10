@@ -15,7 +15,6 @@ function getModels(req) {
         return {
             Applicant: db.model("Applicant"),
             SalaryTemplate: db.model("SalaryTemplate"),
-            SalaryStructure: db.model("SalaryStructure"),
             CompanyProfile: db.model("CompanyProfile"), // Ensure this is available
         };
     } catch (err) {
@@ -50,8 +49,17 @@ exports.scheduleInterview = async (req, res) => {
         const applicant = await Applicant.findById(id).populate('requirementId', 'jobTitle');
         if (!applicant) return res.status(404).json({ message: "Applicant not found" });
 
-        // Update Interview Details
-        applicant.interview = { date, time, mode, location, interviewerName, notes, completed: false };
+        // Update Interview Details with Stage
+        applicant.interview = {
+            date,
+            time,
+            mode,
+            location,
+            interviewerName,
+            notes,
+            completed: false,
+            stage: applicant.status // Save current stage to link interview
+        };
         // applicant.status = 'Interview Scheduled'; // STAIR CASE: Keep in current stage
 
         await applicant.save();
@@ -91,7 +99,16 @@ exports.rescheduleInterview = async (req, res) => {
         if (!applicant) return res.status(404).json({ message: "Applicant not found" });
 
         // Update
-        applicant.interview = { date, time, mode, location, interviewerName, notes, completed: false };
+        applicant.interview = {
+            date,
+            time,
+            mode,
+            location,
+            interviewerName,
+            notes,
+            completed: false,
+            stage: applicant.status // Maintain stage consistency
+        };
         // applicant.status = 'Interview Rescheduled'; // STAIR CASE: Keep in current stage
 
         await applicant.save();
@@ -132,6 +149,17 @@ exports.markInterviewCompleted = async (req, res) => {
             applicant.interview.completed = true;
             // Mark the model as modified for the nested object
             applicant.markModified('interview');
+
+            // Auto-archive in History (Review Log)
+            if (!applicant.reviews) applicant.reviews = [];
+            applicant.reviews.push({
+                stage: applicant.status,
+                rating: 5, // Default for completion
+                feedback: `Interview Completed: ${applicant.interview.mode} on ${applicant.interview.date}`,
+                interviewerName: req.user?.name || 'HR System',
+                createdAt: new Date()
+            });
+            applicant.markModified('reviews');
         }
         // applicant.status = 'Interview Completed'; // STAIR CASE: Keep in current stage
         await applicant.save();

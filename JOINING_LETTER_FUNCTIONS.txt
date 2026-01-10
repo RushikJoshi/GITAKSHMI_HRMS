@@ -1,0 +1,220 @@
+// ==================== JOINING LETTER GENERATION FUNCTIONS ====================
+// Add these to the END of letter.controller.js
+
+/**
+ * GENERATE JOINING LETTER
+ * POST /api/letters/generate-joining
+ */
+exports.generateJoiningLetter = async (req, res) => {
+    try {
+        const { applicantId, templateId } = req.body;
+
+        if (!applicantId || !templateId) {
+            return res.status(400).json({ 
+                success: false,
+                message: 'Applicant ID and Template ID are required' 
+            });
+        }
+
+        const { Applicant, LetterTemplate, SalaryStructure, CompanyProfile } = getModels(req);
+
+        // Fetch applicant
+        const applicant = await Applicant.findById(applicantId).populate('requirementId', 'title department').lean();
+        if (!applicant) {
+            return res.status(404).json({ success: false, message: 'Applicant not found' });
+        }
+
+        // Validate status
+        if (applicant.status !== 'Selected') {
+            return res.status(400).json({ 
+                success: false,
+                message: `Cannot generate joining letter. Candidate status is "${applicant.status}". Only SELECTED candidates can receive joining letters.`,
+                currentStatus: applicant.status,
+                requiredStatus: 'Selected'
+            });
+        }
+
+        // Check salary structure
+        const salaryStructure = await SalaryStructure.findOne({ candidateId: applicantId }).lean();
+        if (!salaryStructure) {
+            return res.status(400).json({ 
+                success: false,
+                message: 'Salary structure not assigned. Please assign salary before generating joining letter.',
+                action: 'ASSIGN_SALARY_FIRST'
+            });
+        }
+
+        // Check template
+        const template = await LetterTemplate.findById(templateId).lean();
+        if (!template) {
+            return res.status(404).json({ success: false, message: 'Template not found' });
+        }
+
+        if (template.type !== 'joining') {
+            return res.status(400).json({ 
+                success: false,
+                message: `Invalid template type. Expected "joining", got "${template.type}"` 
+            });
+        }
+
+        // Check if already generated
+        if (applicant.joiningLetterPath) {
+            return res.status(400).json({ 
+                success: false,
+                message: 'Joining letter already generated for this candidate',
+                existingPath: applicant.joiningLetterPath
+            });
+        }
+
+        const companyProfile = await CompanyProfile.findOne().lean();
+
+        // Prepare data
+        const letterData = {
+            candidateName: applicant.name || '',
+            fatherName: applicant.fatherName || '',
+            email: applicant.email || '',
+            mobile: applicant.mobile || '',
+            address: applicant.address || '',
+            position: applicant.requirementId?.title || 'Not Specified',
+            department: applicant.requirementId?.department || applicant.department || '',
+            joiningDate: applicant.joiningDate ? new Date(applicant.joiningDate).toLocaleDateString('en-IN') : '',
+            location: applicant.location || applicant.workLocation || '',
+            ctcYearly: salaryStructure.totals?.annualCTC || 0,
+            ctcMonthly: salaryStructure.totals?.monthlyCTC || 0,
+            grossSalary: salaryStructure.totals?.grossEarnings || 0,
+            netSalary: salaryStructure.totals?.netSalary || 0,
+            earnings: salaryStructure.earnings || [],
+            deductions: salaryStructure.deductions || [],
+            employerBenefits: salaryStructure.employerBenefits || [],
+            companyName: companyProfile?.companyName || 'Company Name',
+            companyAddress: companyProfile?.address || '',
+            companyPhone: companyProfile?.phone || '',
+            companyEmail: companyProfile?.email || '',
+            companyWebsite: companyProfile?.website || '',
+            letterDate: new Date().toLocaleDateString('en-IN'),
+            refNo: `JL/${new Date().getFullYear()}/${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`
+        };
+
+        // Generate document
+        const templatePath = normalizeFilePath(template.filePath);
+        if (!fs.existsSync(templatePath)) {
+            return res.status(404).json({ success: false, message: 'Template file not found on server' });
+        }
+
+        const templateBuffer = await fsPromises.readFile(templatePath);
+        const zip = new PizZip(templateBuffer);
+        const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
+        doc.render(letterData);
+
+        const outputBuffer = doc.getZip().generate({ type: 'nodebuffer', compression: 'DEFLATE' });
+
+        const outputDir = path.join(__dirname, '../uploads/joining_letters');
+        if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+
+        const fileName = `joining_letter_${applicantId}_${Date.now()}.docx`;
+        const outputPath = path.join(outputDir, fileName);
+        await fsPromises.writeFile(outputPath, outputBuffer);
+
+        await Applicant.findByIdAndUpdate(applicantId, {
+            joiningLetterPath: `/uploads/joining_letters/${fileName}`,
+            joiningLetterGeneratedAt: new Date()
+        });
+
+        res.json({
+            success: true,
+            message: 'Joining letter generated successfully',
+            data: {
+                downloadUrl: `/uploads/joining_letters/${fileName}`,
+                fileName,
+                generatedAt: new Date()
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ Generate Joining Letter Error:', error);
+        res.status(500).json({ success: false, message: 'Failed to generate joining letter', error: error.message });
+    }
+};
+
+/**
+ * PREVIEW JOINING LETTER
+ * POST /api/letters/preview-joining
+ */
+exports.previewJoiningLetter = async (req, res) => {
+    try {
+        const { applicantId, templateId } = req.body;
+
+        if (!applicantId || !templateId) {
+            return res.status(400).json({ success: false, message: 'Applicant ID and Template ID are required' });
+        }
+
+        const { Applicant, LetterTemplate, SalaryStructure, CompanyProfile } = getModels(req);
+
+        const applicant = await Applicant.findById(applicantId).populate('requirementId', 'title department').lean();
+        if (!applicant) {
+            return res.status(404).json({ success: false, message: 'Applicant not found' });
+        }
+
+        const template = await LetterTemplate.findById(templateId).lean();
+        if (!template) {
+            return res.status(404).json({ success: false, message: 'Template not found' });
+        }
+
+        const salaryStructure = await SalaryStructure.findOne({ candidateId: applicantId }).lean();
+        const companyProfile = await CompanyProfile.findOne().lean();
+
+        const letterData = {
+            candidateName: applicant.name || '',
+            fatherName: applicant.fatherName || '',
+            email: applicant.email || '',
+            mobile: applicant.mobile || '',
+            address: applicant.address || '',
+            position: applicant.requirementId?.title || 'Not Specified',
+            department: applicant.requirementId?.department || applicant.department || '',
+            joiningDate: applicant.joiningDate ? new Date(applicant.joiningDate).toLocaleDateString('en-IN') : '',
+            location: applicant.location || applicant.workLocation || '',
+            ctcYearly: salaryStructure?.totals?.annualCTC || 0,
+            ctcMonthly: salaryStructure?.totals?.monthlyCTC || 0,
+            grossSalary: salaryStructure?.totals?.grossEarnings || 0,
+            netSalary: salaryStructure?.totals?.netSalary || 0,
+            earnings: salaryStructure?.earnings || [],
+            deductions: salaryStructure?.deductions || [],
+            employerBenefits: salaryStructure?.employerBenefits || [],
+            companyName: companyProfile?.companyName || 'Company Name',
+            companyAddress: companyProfile?.address || '',
+            companyPhone: companyProfile?.phone || '',
+            companyEmail: companyProfile?.email || '',
+            companyWebsite: companyProfile?.website || '',
+            letterDate: new Date().toLocaleDateString('en-IN'),
+            refNo: `PREVIEW-JL/${new Date().getFullYear()}/XXXX`
+        };
+
+        const templatePath = normalizeFilePath(template.filePath);
+        const templateBuffer = await fsPromises.readFile(templatePath);
+        const zip = new PizZip(templateBuffer);
+        const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
+        doc.render(letterData);
+
+        const outputBuffer = doc.getZip().generate({ type: 'nodebuffer', compression: 'DEFLATE' });
+
+        const previewDir = path.join(__dirname, '../uploads/previews');
+        if (!fs.existsSync(previewDir)) fs.mkdirSync(previewDir, { recursive: true });
+
+        const fileName = `preview_joining_${applicantId}_${Date.now()}.docx`;
+        const outputPath = path.join(previewDir, fileName);
+        await fsPromises.writeFile(outputPath, outputBuffer);
+
+        res.json({
+            success: true,
+            message: 'Preview generated successfully',
+            data: {
+                previewUrl: `/uploads/previews/${fileName}`,
+                fileName
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ Preview Joining Letter Error:', error);
+        res.status(500).json({ success: false, message: 'Failed to generate preview', error: error.message });
+    }
+};

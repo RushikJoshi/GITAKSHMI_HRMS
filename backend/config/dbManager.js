@@ -58,7 +58,7 @@ function registerModels(db, tenantId) {
     const PayrollRunSchema = require("../models/PayrollRun");
     const PayslipSchema = require("../models/Payslip");
     const CompanyPayrollRuleSchema = require("../models/CompanyPayrollRule");
-    const SalaryStructureSchema = require("../models/SalaryStructure");
+    // SalaryStructure is now GLOBAL - removed from here
     const CandidateSchema = require("../models/Candidate");
     const TrackerCandidateSchema = require("../models/TrackerCandidate");
     const CandidateStatusLogSchema = require("../models/CandidateStatusLog");
@@ -100,7 +100,7 @@ function registerModels(db, tenantId) {
     if (!db.models.PayrollRun) db.model("PayrollRun", PayrollRunSchema);
     if (!db.models.Payslip) db.model("Payslip", PayslipSchema);
     if (!db.models.CompanyPayrollRule) db.model("CompanyPayrollRule", CompanyPayrollRuleSchema);
-    if (!db.models.SalaryStructure) db.model("SalaryStructure", SalaryStructureSchema);
+    // SalaryStructure removed - GLOBAL
     if (!db.models.Candidate) db.model("Candidate", CandidateSchema);
     if (!db.models.TrackerCandidate) db.model("TrackerCandidate", TrackerCandidateSchema);
     if (!db.models.CandidateStatusLog) db.model("CandidateStatusLog", CandidateStatusLogSchema);

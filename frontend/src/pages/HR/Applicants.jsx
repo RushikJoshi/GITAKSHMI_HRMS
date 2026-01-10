@@ -31,6 +31,14 @@ export default function Applicants() {
     const [editingWorkflow, setEditingWorkflow] = useState([]);
     const [newStageName, setNewStageName] = useState('');
 
+    // Selection & Review State
+    const [selectedApplicant, setSelectedApplicant] = useState(null);
+    const [selectedStatusForReview, setSelectedStatusForReview] = useState(null);
+    const [reviewRating, setReviewRating] = useState(0);
+    const [reviewFeedback, setReviewFeedback] = useState('');
+    const [isFinishingInterview, setIsFinishingInterview] = useState(false);
+
+
     const openWorkflowEditor = () => {
         if (!selectedRequirement) return;
         // Ensure we have at least the basic structure if empty
@@ -307,8 +315,7 @@ export default function Applicants() {
             setUploading(false);
         }
     };
-    const [selectedApplicant, setSelectedApplicant] = useState(null);
-    const [selectedStatusForReview, setSelectedStatusForReview] = useState(null);
+    // State moved to top
     const [offerData, setOfferData] = useState({
         joiningDate: '',
         location: '',
@@ -441,6 +448,10 @@ export default function Applicants() {
 
     const handleInterviewSubmit = async () => {
         if (!selectedApplicant) return;
+        if (!interviewData.date || !interviewData.time) {
+            alert("Please select both Date and Time for the interview.");
+            return;
+        }
         setLoading(true);
         try {
             const url = isReschedule
@@ -450,6 +461,16 @@ export default function Applicants() {
             const method = isReschedule ? 'put' : 'post';
 
             await api[method](url, { ...interviewData, stage: activeTab });
+
+            // Auto-move to next stage on initial schedule
+            if (!isReschedule) {
+                const currentIndex = workflowTabs.indexOf(activeTab);
+                const nextStage = workflowTabs[currentIndex + 1];
+                // Only move if next stage exists and is not 'Finalized' (which usually requires distinct action)
+                if (nextStage && nextStage !== 'Finalized') {
+                    await api.put(`/requirements/applicants/${selectedApplicant._id}/status`, { status: nextStage });
+                }
+            }
 
             alert(isReschedule ? 'Interview Rescheduled Successfully!' : 'Interview Scheduled Successfully!');
             setShowInterviewModal(false);
@@ -462,13 +483,19 @@ export default function Applicants() {
         }
     };
 
-    const markInterviewCompleted = (applicant) => {
-        setSelectedApplicant(applicant);
-        setIsFinishingInterview(true);
-        setSelectedStatusForReview('');
-        setReviewRating(0);
-        setReviewFeedback('');
-        setShowEvaluationDrawer(true);
+    const markInterviewCompleted = async (applicant) => {
+        if (!confirm("Confirm interview completion? This will be logged in history.")) return;
+        setLoading(true);
+        try {
+            await api.put(`/requirements/applicants/${applicant._id}/interview/complete`);
+            // alert("Interview Marked Completed");
+            loadApplicants();
+        } catch (err) {
+            console.error(err);
+            alert("Error: " + (err.response?.data?.message || err.message));
+        } finally {
+            setLoading(false);
+        }
     };
 
     const updateStatus = async (applicant, status, review = null) => {
@@ -1377,9 +1404,9 @@ export default function Applicants() {
                                                                 )}
 
                                                                 {/* 2. Interview Row (Schedule / Details) */}
-                                                                {(activeTab !== 'Applied' || app.status !== 'Applied') && (
+                                                                {activeTab !== 'Applied' && (workflowTabs.indexOf(activeTab) !== workflowTabs.indexOf('Finalized') - 1) && (
                                                                     <div className="pt-2 border-t border-slate-50">
-                                                                        {app.interview?.date && app.interview.stage === activeTab ? (
+                                                                        {app.interview?.date ? (
                                                                             <div className={`p-4 border rounded-2xl ${app.interview.completed ? 'bg-emerald-50/40 border-emerald-100' : 'bg-blue-50/40 border-blue-100'}`}>
                                                                                 <div className="flex items-center justify-between mb-3">
                                                                                     <div className={`text-[10px] font-black uppercase tracking-[1.5px] ${app.interview.completed ? 'text-emerald-600' : 'text-blue-600'}`}>
@@ -1391,7 +1418,7 @@ export default function Applicants() {
                                                                                 <div className="flex flex-col gap-2">
                                                                                     <div className="flex items-center gap-3 text-[11px] font-bold text-slate-700">
                                                                                         <div className="flex items-center gap-1.5">
-                                                                                            <span className="opacity-50">📅</span> {dayjs(app.interview.date).format('DD MMM, YYYY')}
+                                                                                            <span className="opacity-50">📅</span> {app.interview.date ? dayjs(app.interview.date).format('DD MMM, YYYY') : 'Date TBD'}
                                                                                         </div>
                                                                                         <div className="flex items-center gap-1.5">
                                                                                             <span className="opacity-50">⏰</span> {app.interview.time}
@@ -1404,7 +1431,6 @@ export default function Applicants() {
 
                                                                                 {!app.interview.completed && (
                                                                                     <div className="flex gap-4 mt-4 border-t border-blue-100/50 pt-3">
-                                                                                        <button onClick={() => openScheduleModal(app, true)} className="text-[10px] font-black text-blue-600 hover:text-blue-700 tracking-wider">RESCHEDULE</button>
                                                                                         <button onClick={() => markInterviewCompleted(app)} className="text-[10px] font-black text-emerald-600 hover:text-emerald-700 tracking-wider">COMPLETED</button>
                                                                                     </div>
                                                                                 )}
@@ -1431,7 +1457,7 @@ export default function Applicants() {
                                                                                 onClick={() => {
                                                                                     const nextStage = workflowTabs[workflowTabs.indexOf(activeTab) + 1] || workflowTabs[1];
                                                                                     if (nextStage && nextStage !== 'Finalized') {
-                                                                                        openReviewPrompt(app, nextStage);
+                                                                                        updateStatus(app, nextStage);
                                                                                     } else {
                                                                                         // If no direct next stage, just open the select
                                                                                         alert("Please use the dropdown to select a destination stage.");
@@ -1443,7 +1469,7 @@ export default function Applicants() {
                                                                                 Shortlist Candidate
                                                                             </button>
                                                                             <button
-                                                                                onClick={() => openReviewPrompt(app, 'Rejected')}
+                                                                                onClick={() => updateStatus(app, 'Rejected')}
                                                                                 className="w-full py-2.5 bg-red-50 text-red-600 text-[10px] font-black uppercase tracking-[1px] rounded-xl hover:bg-red-100 transition-all"
                                                                             >
                                                                                 Reject Application
@@ -1451,20 +1477,23 @@ export default function Applicants() {
                                                                         </div>
                                                                     ) : (
                                                                         <>
-                                                                            {/* Review Button Row */}
-                                                                            <button
-                                                                                onClick={() => openReviewPrompt(app, app.status)}
-                                                                                className="w-full py-3 bg-blue-600/5 text-blue-600 text-[10px] font-black uppercase tracking-[2px] rounded-2xl hover:bg-blue-600 hover:text-white transition-all duration-300 flex items-center justify-center gap-2 border border-blue-100/50"
-                                                                            >
-                                                                                <Star size={14} className="fill-current" />
-                                                                                Give Review & Scorecard
-                                                                            </button>
+                                                                            {/* Review Button Removed as per request */}
+                                                                            {/* {app.interview?.completed && (
+                                                                                <button
+                                                                                    onClick={() => openReviewPrompt(app, app.status)}
+                                                                                    className="w-full py-3 bg-blue-600/5 text-blue-600 text-[10px] font-black uppercase tracking-[2px] rounded-2xl hover:bg-blue-600 hover:text-white transition-all duration-300 flex items-center justify-center gap-2 border border-blue-100/50"
+                                                                                >
+                                                                                    <Star size={14} className="fill-current" />
+                                                                                    Give Review & Scorecard
+                                                                                </button>
+                                                                            )} */}
 
                                                                             {/* Move to Stage Row */}
                                                                             {(() => {
                                                                                 const hasReviewForCurrentStage = app.reviews?.some(rev => rev.stage === activeTab);
-                                                                                // Allow 'Applied' stage to bypass review if needed (though we handle it above primarily)
-                                                                                const canMove = hasReviewForCurrentStage || activeTab === 'Applied';
+                                                                                const isPreFinal = workflowTabs.indexOf(activeTab) === workflowTabs.indexOf('Finalized') - 1;
+                                                                                // Allow 'Applied' and Pre-Final skip review
+                                                                                const canMove = hasReviewForCurrentStage || activeTab === 'Applied' || isPreFinal;
 
                                                                                 return (
                                                                                     <div className="relative group/select">
@@ -1475,7 +1504,7 @@ export default function Applicants() {
                                                                                             size="large"
                                                                                             variant="borderless"
                                                                                             style={{ background: '#f8fafc', borderRadius: '16px', border: '1px solid #f1f5f9' }}
-                                                                                            onChange={(val) => val === 'custom_add' ? (setCandidateForCustomStage(app), setIsCustomStageModalVisible(true)) : openReviewPrompt(app, val)}
+                                                                                            onChange={(val) => val === 'custom_add' ? (setCandidateForCustomStage(app), setIsCustomStageModalVisible(true)) : updateStatus(app, val)}
                                                                                             value={null}
                                                                                         >
                                                                                             <Select.OptGroup label="PROMOTE TO">
@@ -1665,6 +1694,7 @@ export default function Applicants() {
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700">Joining Date *</label>
                                     <DatePicker
+                                        disabledDate={(current) => current && current < dayjs().startOf('day')}
                                         className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 h-[42px]"
                                         format="DD-MM-YYYY"
                                         placeholder="DD-MM-YYYY"
@@ -1984,6 +2014,7 @@ export default function Applicants() {
                                     <label className="block text-sm font-medium text-slate-700">Date</label>
                                     <input
                                         type="date"
+                                        min={dayjs().format('YYYY-MM-DD')}
                                         value={interviewData.date}
                                         onChange={(e) => setInterviewData({ ...interviewData, date: e.target.value })}
                                         className="w-full mt-1 p-2 border rounded"
@@ -2628,8 +2659,8 @@ export default function Applicants() {
                                 onClick={saveDocuments}
                                 disabled={uploadedDocuments.length === 0}
                                 className={`flex-1 py-2 font-bold rounded-lg transition-colors ${uploadedDocuments.length > 0
-                                        ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                                        : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                                    ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                                    : 'bg-slate-100 text-slate-400 cursor-not-allowed'
                                     }`}
                             >
                                 Save Documents ({uploadedDocuments.length})
