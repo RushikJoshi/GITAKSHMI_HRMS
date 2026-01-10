@@ -4,7 +4,7 @@ import { formatDateDDMMYYYY } from '../../utils/dateUtils';
 import { DatePicker, Pagination } from 'antd';
 import dayjs from 'dayjs';
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://hrms.gitakshmi.com';
 
 const DEPARTMENTS = ["HR", "Tech", "Accounts", "Admin"];
 

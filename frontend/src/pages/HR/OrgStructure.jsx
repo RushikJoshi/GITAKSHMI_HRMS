@@ -14,7 +14,7 @@ import {
     CheckCircleOutlined
 } from '@ant-design/icons';
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://hrms.gitakshmi.com';
 
 export default function OrgStructure() {
     const { getTopLevelEmployees, getDirectReports } = useOrgStructure();

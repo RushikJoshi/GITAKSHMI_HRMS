@@ -16,7 +16,7 @@ export default function Companies() {
   const [openView, setOpenView] = useState(false);
   const [revealMap, setRevealMap] = useState({});
   const _navigate = useNavigate();
-  const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:5000/api';
+  const API_BASE = import.meta.env.VITE_API_BASE || 'https://hrms.gitakshmi.com/api';
   const API_ORIGIN = API_BASE.replace(/\/api\/?$/, '');
 
   async function load() {

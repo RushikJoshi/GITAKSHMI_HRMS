@@ -15,11 +15,10 @@ services:
     ports:
       - "5173:80"
     environment:
-      - VITE_API_BASE=http://localhost:5000/api
+      - VITE_API_BASE=https://hrms.gitakshmi.com/api
     depends_on:
       - backend
   mongo:
     image: mongo:6
     ports:
       - "27017:27017"
-

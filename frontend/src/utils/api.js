@@ -8,7 +8,7 @@ import { getToken, removeToken } from './token';
  */
 
 // Construct API base URL safely, avoiding double '/api' paths
-const rawBase = (import.meta.env.VITE_API_URL || 'http://localhost:5000').replace(/\/+$/, '');
+const rawBase = (import.meta.env.VITE_API_URL || 'https://hrms.gitakshmi.com').replace(/\/+$/, '');
 const API_BASE = rawBase.endsWith('/api') ? rawBase : rawBase + '/api';
 
 console.log('🔥 Using API BASE:', API_BASE);

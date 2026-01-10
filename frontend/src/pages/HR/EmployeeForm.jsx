@@ -5,7 +5,7 @@ import { IndianRupee } from 'lucide-react';
 import dayjs from 'dayjs';
 import { formatDateDDMMYYYY } from '../../utils/dateUtils';
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://hrms.gitakshmi.com';
 const NATIONALITIES = ['Indian', 'American', 'British', 'Canadian', 'Australian', 'Other'];
 
 export default function EmployeeForm({ employee, onClose, viewOnly = false }) {

@@ -31,7 +31,7 @@ const runDebug = async () => {
         try {
             console.log(`Attempting DELETE ${API_URL}/${dummy._id}`);
             // Use port 5000 directly to bypass frontend proxy
-            await axios.delete(`http://localhost:5000/api/letters/templates/${dummy._id}`);
+            await axios.delete(`https://hrms.gitakshmi.com/api/letters/templates/${dummy._id}`);
             console.log('✅ DELETE SUCCESS (200 OK)');
         } catch (e) {
             console.log('❌ API ERROR STATUS:', e.response?.status);

@@ -58,10 +58,10 @@ export default function LetterSettings() {
             if (res.data.success) {
                 const loadUrl = res.data.url.startsWith('http')
                     ? res.data.url
-                    : `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${res.data.url}`;
-                
+                    : `${import.meta.env.VITE_API_URL || 'https://hrms.gitakshmi.com'}${res.data.url}`;
+
                 setLetterPadUrl(loadUrl);
-                
+
                 // Auto-save
                 await saveLetterPad(loadUrl);
             }
@@ -82,7 +82,7 @@ export default function LetterSettings() {
                     letterheadBg: url || letterPadUrl
                 }
             };
-            
+
             await api.post('/letters/company-profile', profileData);
             alert('Letter pad saved successfully!');
         } catch (error) {
@@ -105,7 +105,7 @@ export default function LetterSettings() {
                     letterheadBg: ''
                 }
             };
-            
+
             await api.post('/letters/company-profile', profileData);
             setLetterPadUrl('');
             alert('Letter pad removed successfully!');
@@ -122,7 +122,7 @@ export default function LetterSettings() {
             <div className="mb-8">
                 <h1 className="text-2xl font-bold text-slate-900">Letter Pad Settings</h1>
                 <p className="text-slate-500 text-sm mt-1">
-                    Upload your pre-designed letter pad image (A4 size: 210 × 297 mm). 
+                    Upload your pre-designed letter pad image (A4 size: 210 × 297 mm).
                     This image will be used as the background for all letters when "Use Letter Pad" is selected.
                 </p>
             </div>

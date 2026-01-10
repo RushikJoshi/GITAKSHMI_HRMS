@@ -1,7 +1,7 @@
-     import React from 'react';
+import React from 'react';
 import { User, Plus, ChevronDown, ChevronUp, MapPin, Briefcase } from 'lucide-react';
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://hrms.gitakshmi.com';
 
 const getProfilePic = (path) => {
     if (!path) return null;

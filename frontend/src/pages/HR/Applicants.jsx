@@ -845,7 +845,7 @@ export default function Applicants() {
                 if (res.data.downloadUrl) {
                     const url = import.meta.env.VITE_API_URL
                         ? `${import.meta.env.VITE_API_URL}${res.data.downloadUrl}`
-                        : `http://localhost:5000${res.data.downloadUrl}`;
+                        : `https://hrms.gitakshmi.com${res.data.downloadUrl}`;
                     setPreviewPdfUrl(url);
                     setShowPreview(true);
                 }
@@ -896,7 +896,7 @@ export default function Applicants() {
             if (res.data.downloadUrl) {
                 const url = import.meta.env.VITE_API_URL
                     ? `${import.meta.env.VITE_API_URL}${res.data.downloadUrl}`
-                    : `http://localhost:5000${res.data.downloadUrl}`;
+                    : `https://hrms.gitakshmi.com${res.data.downloadUrl}`;
                 window.open(url, '_blank');
 
                 setShowModal(false);
@@ -920,7 +920,7 @@ export default function Applicants() {
         }
         const url = import.meta.env.VITE_API_URL
             ? `${import.meta.env.VITE_API_URL}/uploads/offers/${cleanPath}`
-            : `http://localhost:5000/uploads/offers/${cleanPath}`;
+            : `https://hrms.gitakshmi.com/uploads/offers/${cleanPath}`;
         window.open(url, '_blank');
     };
 
@@ -933,7 +933,7 @@ export default function Applicants() {
         }
         const url = import.meta.env.VITE_API_URL
             ? `${import.meta.env.VITE_API_URL}/uploads/offers/${cleanPath}`
-            : `http://localhost:5000/uploads/offers/${cleanPath}`;
+            : `https://hrms.gitakshmi.com/uploads/offers/${cleanPath}`;
         window.open(url, '_blank');
     };
 
@@ -943,7 +943,7 @@ export default function Applicants() {
             if (response.data.downloadUrl) {
                 const url = import.meta.env.VITE_API_URL
                     ? `${import.meta.env.VITE_API_URL}${response.data.downloadUrl}`
-                    : `http://localhost:5000${response.data.downloadUrl}`;
+                    : `https://hrms.gitakshmi.com${response.data.downloadUrl}`;
                 window.open(url, '_blank');
             }
         } catch (err) {
@@ -958,7 +958,7 @@ export default function Applicants() {
             if (response.data.downloadUrl) {
                 const url = import.meta.env.VITE_API_URL
                     ? `${import.meta.env.VITE_API_URL}${response.data.downloadUrl}`
-                    : `http://localhost:5000${response.data.downloadUrl}`;
+                    : `https://hrms.gitakshmi.com${response.data.downloadUrl}`;
                 const link = document.createElement('a');
                 link.href = url;
                 link.download = `Joining_Letter_${applicantId}.pdf`;
@@ -980,7 +980,7 @@ export default function Applicants() {
         }
         return import.meta.env.VITE_API_URL
             ? `${import.meta.env.VITE_API_URL}/uploads/${cleanPath}`
-            : `http://localhost:5000/uploads/${cleanPath}`;
+            : `https://hrms.gitakshmi.com/uploads/${cleanPath}`;
     };
 
     const viewResume = (filePath) => {
@@ -1044,7 +1044,7 @@ export default function Applicants() {
             if (res.data.previewUrl) {
                 const url = import.meta.env.VITE_API_URL
                     ? `${import.meta.env.VITE_API_URL}${res.data.previewUrl}`
-                    : `http://localhost:5000${res.data.previewUrl}`;
+                    : `https://hrms.gitakshmi.com${res.data.previewUrl}`;
 
                 setJoiningPreviewUrl(url);
                 setShowJoiningPreview(true);
@@ -1087,7 +1087,7 @@ export default function Applicants() {
             if (res.data.downloadUrl) {
                 const url = import.meta.env.VITE_API_URL
                     ? `${import.meta.env.VITE_API_URL}${res.data.downloadUrl}`
-                    : `http://localhost:5000${res.data.downloadUrl}`;
+                    : `https://hrms.gitakshmi.com${res.data.downloadUrl}`;
 
                 // Download the PDF
                 const link = document.createElement('a');

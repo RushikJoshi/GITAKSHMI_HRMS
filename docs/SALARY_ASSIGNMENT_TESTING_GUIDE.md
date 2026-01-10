@@ -21,7 +21,7 @@ Before testing, ensure:
 #### 1.1 Check Salary Templates Exist
 ```bash
 # In browser console or Postman
-GET http://localhost:5000/api/payroll/salary-templates
+GET https://hrms.gitakshmi.com/api/payroll/salary-templates
 Headers: Authorization: Bearer <your-token>
 ```
 
@@ -33,7 +33,7 @@ Headers: Authorization: Bearer <your-token>
 #### 1.2 Check Applicants Exist
 ```bash
 # In browser console or Postman
-GET http://localhost:5000/api/requirements/applicants
+GET https://hrms.gitakshmi.com/api/requirements/applicants
 Headers: Authorization: Bearer <your-token>
 ```
 
@@ -45,7 +45,7 @@ Headers: Authorization: Bearer <your-token>
 #### 1.3 Verify Applicant Status is "Selected"
 ```bash
 # Check applicant status
-GET http://localhost:5000/api/requirements/applicants
+GET https://hrms.gitakshmi.com/api/requirements/applicants
 # Find an applicant with status: "Selected"
 ```
 
@@ -59,7 +59,7 @@ GET http://localhost:5000/api/requirements/applicants
 
 #### 2.1 Assign Salary to Applicant
 ```bash
-POST http://localhost:5000/api/requirements/applicants/{applicantId}/assign-salary
+POST https://hrms.gitakshmi.com/api/requirements/applicants/{applicantId}/assign-salary
 Headers: 
   Authorization: Bearer <your-token>
   Content-Type: application/json
@@ -71,7 +71,7 @@ Body (JSON):
 
 **Example with curl:**
 ```bash
-curl -X POST http://localhost:5000/api/requirements/applicants/60a1b2c3d4e5f6g7h8i9j0k1/assign-salary \
+curl -X POST https://hrms.gitakshmi.com/api/requirements/applicants/60a1b2c3d4e5f6g7h8i9j0k1/assign-salary \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"salaryTemplateId": "60a1b2c3d4e5f6g7h8i9j0k2"}'
@@ -115,7 +115,7 @@ curl -X POST http://localhost:5000/api/requirements/applicants/60a1b2c3d4e5f6g7h
 
 **Option A: Using API**
 ```bash
-GET http://localhost:5000/api/requirements/applicants/{applicantId}/salary
+GET https://hrms.gitakshmi.com/api/requirements/applicants/{applicantId}/salary
 Headers: Authorization: Bearer <your-token>
 ```
 
@@ -151,7 +151,7 @@ db.applicants.findOne({ _id: ObjectId("YOUR_APPLICANT_ID") })
 
 #### 3.1 Test with Invalid Applicant ID
 ```bash
-POST http://localhost:5000/api/requirements/applicants/INVALID_ID/assign-salary
+POST https://hrms.gitakshmi.com/api/requirements/applicants/INVALID_ID/assign-salary
 Body: { "salaryTemplateId": "VALID_TEMPLATE_ID" }
 ```
 
@@ -168,7 +168,7 @@ Body: { "salaryTemplateId": "VALID_TEMPLATE_ID" }
 #### 3.2 Test with Non-Selected Applicant
 ```bash
 # Use applicant with status: "Applied" or "Shortlisted"
-POST http://localhost:5000/api/requirements/applicants/{applicantId}/assign-salary
+POST https://hrms.gitakshmi.com/api/requirements/applicants/{applicantId}/assign-salary
 Body: { "salaryTemplateId": "VALID_TEMPLATE_ID" }
 ```
 
@@ -185,7 +185,7 @@ Body: { "salaryTemplateId": "VALID_TEMPLATE_ID" }
 #### 3.3 Test Duplicate Assignment
 ```bash
 # Try assigning salary to same applicant twice
-POST http://localhost:5000/api/requirements/applicants/{applicantId}/assign-salary
+POST https://hrms.gitakshmi.com/api/requirements/applicants/{applicantId}/assign-salary
 Body: { "salaryTemplateId": "VALID_TEMPLATE_ID" }
 # Run the same request again
 ```
@@ -206,7 +206,7 @@ Body: { "salaryTemplateId": "VALID_TEMPLATE_ID" }
 
 #### 3.4 Test with Missing Salary Template
 ```bash
-POST http://localhost:5000/api/requirements/applicants/{applicantId}/assign-salary
+POST https://hrms.gitakshmi.com/api/requirements/applicants/{applicantId}/assign-salary
 Body: { "salaryTemplateId": "NON_EXISTENT_ID" }
 ```
 
@@ -224,7 +224,7 @@ Body: { "salaryTemplateId": "NON_EXISTENT_ID" }
 
 #### 4.1 Test WITHOUT Salary Assignment (Should Fail)
 ```bash
-POST http://localhost:5000/api/letters/generate-joining
+POST https://hrms.gitakshmi.com/api/letters/generate-joining
 Headers: Authorization: Bearer <your-token>
 Body:
 {
@@ -248,7 +248,7 @@ Body:
 ```bash
 # 1. First assign salary (from Step 2.1)
 # 2. Then generate joining letter
-POST http://localhost:5000/api/letters/generate-joining
+POST https://hrms.gitakshmi.com/api/letters/generate-joining
 Headers: Authorization: Bearer <your-token>
 Body:
 {
@@ -278,7 +278,7 @@ Body:
 #### 4.3 Verify PDF Contains Salary Data
 
 **Check PDF File:**
-1. Download the generated PDF from: `http://localhost:5000/uploads/offers/Joining_Letter_XXX_XXX.pdf`
+1. Download the generated PDF from: `https://hrms.gitakshmi.com/uploads/offers/Joining_Letter_XXX_XXX.pdf`
 2. Open PDF and verify:
    - ✅ CTC amount is present
    - ✅ Basic salary is present
@@ -374,7 +374,7 @@ Look for these log messages in terminal:
 const token = localStorage.getItem('token'); // or wherever your token is stored
 
 // 2. Get applicants
-fetch('http://localhost:5000/api/requirements/applicants', {
+fetch('https://hrms.gitakshmi.com/api/requirements/applicants', {
   headers: { 'Authorization': `Bearer ${token}` }
 })
 .then(r => r.json())
@@ -385,7 +385,7 @@ fetch('http://localhost:5000/api/requirements/applicants', {
 });
 
 // 3. Get salary templates
-fetch('http://localhost:5000/api/payroll/salary-templates', {
+fetch('https://hrms.gitakshmi.com/api/payroll/salary-templates', {
   headers: { 'Authorization': `Bearer ${token}` }
 })
 .then(r => r.json())
@@ -396,7 +396,7 @@ fetch('http://localhost:5000/api/payroll/salary-templates', {
 });
 
 // 4. Assign salary
-fetch('http://localhost:5000/api/requirements/applicants/YOUR_APPLICANT_ID/assign-salary', {
+fetch('https://hrms.gitakshmi.com/api/requirements/applicants/YOUR_APPLICANT_ID/assign-salary', {
   method: 'POST',
   headers: {
     'Authorization': `Bearer ${token}`,
@@ -412,7 +412,7 @@ fetch('http://localhost:5000/api/requirements/applicants/YOUR_APPLICANT_ID/assig
 });
 
 // 5. Get salary
-fetch('http://localhost:5000/api/requirements/applicants/YOUR_APPLICANT_ID/salary', {
+fetch('https://hrms.gitakshmi.com/api/requirements/applicants/YOUR_APPLICANT_ID/salary', {
   headers: { 'Authorization': `Bearer ${token}` }
 })
 .then(r => r.json())

@@ -56,7 +56,7 @@ const OfferLetterPreview = memo(
       const bgUrl = rawBgPath
         ? (rawBgPath.startsWith('http')
           ? rawBgPath
-          : `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}${rawBgPath.startsWith('/') ? '' : '/'}${rawBgPath}`
+          : `${import.meta.env.VITE_API_URL || 'https://hrms.gitakshmi.com'}${rawBgPath.startsWith('/') ? '' : '/'}${rawBgPath}`
         ).replace(/\\/g, '/')
         : null;
 

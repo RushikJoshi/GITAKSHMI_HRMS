@@ -5,7 +5,7 @@
 ### **STEP 1: Assign Salary to Applicant** ⚡
 
 ```
-POST http://localhost:5000/api/requirements/applicants/{applicantId}/assign-salary
+POST https://hrms.gitakshmi.com/api/requirements/applicants/{applicantId}/assign-salary
 Headers: Authorization: Bearer YOUR_TOKEN
 Body: { "salaryTemplateId": "YOUR_TEMPLATE_ID" }
 ```
@@ -17,7 +17,7 @@ Body: { "salaryTemplateId": "YOUR_TEMPLATE_ID" }
 ### **STEP 2: Generate Joining Letter** 📄
 
 ```
-POST http://localhost:5000/api/letters/generate-joining
+POST https://hrms.gitakshmi.com/api/letters/generate-joining
 Headers: Authorization: Bearer YOUR_TOKEN
 Body: {
   "applicantId": "SAME_APPLICANT_ID",
@@ -31,7 +31,7 @@ Body: {
 
 ### **STEP 3: Download & Open PDF** 📥
 
-Open the PDF from: `http://localhost:5000/uploads/offers/Joining_Letter_XXX.pdf`
+Open the PDF from: `https://hrms.gitakshmi.com/uploads/offers/Joining_Letter_XXX.pdf`
 
 **Check PDF Contains:**
 - ✅ CTC amount (not zero/empty)

@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { formatDateDDMMYYYY } from '../utils/dateUtils';
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://hrms.gitakshmi.com';
 
 const InfoGroup = ({ title, children, icon: Icon }) => (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-6">

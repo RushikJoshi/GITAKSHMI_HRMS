@@ -335,7 +335,7 @@ const OfferLetterEditor = ({
                     /* Add dynamic background logic if needed, but base styles come from document.css */
                     box-shadow: 0 4px 6px rgba(0,0,0,0.1);
                     ${isLetterPad && backgroundUrl ? `
-                        background-image: url('${backgroundUrl.startsWith('http') ? backgroundUrl : (import.meta.env.VITE_API_URL || 'http://localhost:5000') + (backgroundUrl.startsWith('/') ? '' : '/') + backgroundUrl}');
+                        background-image: url('${backgroundUrl.startsWith('http') ? backgroundUrl : (import.meta.env.VITE_API_URL || 'https://hrms.gitakshmi.com') + (backgroundUrl.startsWith('/') ? '' : '/') + backgroundUrl}');
                         background-size: 100% 100%;
                         background-repeat: no-repeat;
                     ` : ''}

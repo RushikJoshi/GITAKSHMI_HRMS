@@ -5,7 +5,7 @@ async function testAPI() {
     console.log('Testing login...');
 
     // Try HR login
-    const loginRes = await axios.post('http://localhost:5000/api/auth/login-hr', {
+    const loginRes = await axios.post('https://hrms.gitakshmi.com/api/auth/login-hr', {
       companyCode: 'goo001',
       email: 'google@gmail.com',
       password: 'admin123'
@@ -17,7 +17,7 @@ async function testAPI() {
 
     console.log('Testing offer-templates API...');
 
-    const res = await axios.get('http://localhost:5000/api/offer-templates', {
+    const res = await axios.get('https://hrms.gitakshmi.com/api/offer-templates', {
       headers: {
         'Authorization': `Bearer ${token}`,
         'X-Tenant-ID': tenantId
@@ -26,7 +26,7 @@ async function testAPI() {
 
     console.log('Testing offer-templates API...');
 
-    const templateRes = await axios.get('http://localhost:5000/api/offer-templates', {
+    const templateRes = await axios.get('https://hrms.gitakshmi.com/api/offer-templates', {
       headers: {
         'Authorization': `Bearer ${token}`,
         'X-Tenant-ID': tenantId
@@ -40,7 +40,7 @@ async function testAPI() {
     console.log('Testing /api/hr/offer-templates instead...');
 
     try {
-      const hrTemplateRes = await axios.get('http://localhost:5000/api/hr/offer-templates', {
+      const hrTemplateRes = await axios.get('https://hrms.gitakshmi.com/api/hr/offer-templates', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'X-Tenant-ID': tenantId
